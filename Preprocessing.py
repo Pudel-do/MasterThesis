@@ -7,7 +7,10 @@ Created on Sat Nov 20 14:40:40 2021
 
 import pandas as pd
 import numpy as np
+from fuzzywuzzy import fuzz
+from fuzzywuzzy import process
 import pickle
+import re
 import sys
 
 exit_message = 'Download of CRSP data for quotes and returns necessary due to time period adjustments'
@@ -17,7 +20,7 @@ input_path = r'C:\Users\Matthias Pudel\OneDrive\Studium\Master\Master Thesis\Emp
 sdc_raw_file = 'sdc_full_raw.csv'
 sdc_total_assets_file = 'sdc_total_assets.csv'
 quotes_file = 'Quotes.csv'
-uwriter_rank_file = 'UnderwriterRank.xlsx'
+uwriter_file = 'UnderwriterRank.xlsx'
 cpi_file = 'CPI_85_20.xlsx'
 
 output_path = r'C:\Users\Matthias Pudel\OneDrive\Studium\Master\Master Thesis\Empirical Evidence\Code\Output Data'
@@ -35,7 +38,7 @@ def get_object(path, filename):
         return pickle.load(f)
 
 
-class Preprocessing:
+class DataPreparation:
     def __init__(self, start_date, end_date):
         self.start_date = start_date
         self.end_date = end_date
@@ -43,6 +46,10 @@ class Preprocessing:
     def rough_preprocessing(self):
         sdc_raw = pd.read_csv(input_path+'\\'+ sdc_raw_file,
                               parse_dates = ['IssueDate', 'FilingDate'])
+        
+        sdc_cols = sdc_raw.columns.to_list()
+        sdc_cols.sort()
+        print(sdc_cols)
         
         mask =  (sdc_raw['IssueDate'] >= self.start_date) &\
                 (sdc_raw['IssueDate'] <= self.end_date) &\
@@ -57,7 +64,7 @@ class Preprocessing:
         sdc = sdc_raw.loc[mask]
         self.sdc = sdc
         
-    def build_aux_vars(self, adj_time):
+    def build_aux_vars(self, update_time):
         self.sdc['NCUSIP'] = self.sdc['CUSIP9'].str[:8]
         start_year = self.start_date.strftime('%Y')
         end_year = self.end_date.strftime('%Y')
@@ -65,7 +72,7 @@ class Preprocessing:
         self.start_year = start_year
         self.end_year = end_year
         
-        if adj_time == True:
+        if update_time == True:
             self.sdc['NCUSIP'].to_csv(output_path+'\\'+ncusip_file,
                                       header = False,
                                       index = False)
@@ -94,20 +101,43 @@ class Preprocessing:
         cpi_merge_dt = self.sdc['IssueDate'].dt.strftime('%Y-%m')
         self.sdc['CPI_MergeDate'] = cpi_merge_dt
         
-    def ext_preprocessing(self):
+    def extended_preprocessing(self):
+        rank_data = pd.read_excel(input_path+'\\'+uwriter_file,
+                                  engine = 'openpyxl',
+                                  sheet_name = 'UnderwriterRank')
+        
+        name = pd.DataFrame(rank_data['Underwriter Name'])
+        rank_1985_2000 = rank_data.loc[:, 'Rank8591':'Rank9200']
+        rank_2001_2020 = rank_data.loc[:, 'Rank0104':'Rank1820']
+        
+        if self.end_year == '2019':
+            rank_df = name.join(rank_2001_2020)
+            rank_df = rank_df.replace(-9, np.nan)
+            rank_df = rank_df[:-2]
+            rank_df['Rank'] = rank_df.mean(axis = 1)
+        else:
+            rank_df = name.join(rank_2001_2020)
+            rank_df = rank_df.replace(-9, np.nan)
+            rank_df = rank_df[:-2]
+            rank_df['Rank'] = rank_df.mean(axis = 1)
+        
+        sdc_uwriter = self.sdc['LeadManagersLongName']
+        match_results = pd.DataFrame()
+        for index, value in sdc_uwriter.items():
+            char_pos = value.find('|')
+            if char_pos != -1:
+                sdc_name = value[:char_pos]
+                sdc_name = re.sub(r'\W+', '', sdc_name)
+                sdc_name = sdc_name.casefold() #Transforms string in lower case letters
+            else:
+                sdc_name = value
+                sdc_name = re.sub(r'\W+', '', sdc_name)
+                sdc_name = sdc_name.casefold() 
+                
 
-    def data_merging(self):
-        cpi_data = pd.read_excel(input_path+'\\'+cpi_file,
-                                 engine = 'openpyxl',
-                                 names = ['CPI_Date', 'CPI'])
-        cpi_data['CPI_Date'] = cpi_data['CPI_Date'].dt.strftime('%Y-%m')
         
-        self.data_full = pd.merge(self.sdc,
-                                  cpi_data,
-                                  how = 'left',
-                                  left_on = 'CPI_MergeDate',
-                                  right_on = 'CPI_Date')
+            
+
+
         
-        
-        
-        
+    
