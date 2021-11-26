@@ -24,7 +24,7 @@ uwriter_file = 'UnderwriterRank.xlsx'
 cpi_file = 'CPI_85_20.xlsx'
 
 output_path = r'C:\Users\Matthias Pudel\OneDrive\Studium\Master\Master Thesis\Empirical Evidence\Code\Output Data'
-process_obj_file = 'Preprocessing.pkl'
+process_obj_file = 'DataPreparation.pkl'
 
 cols = []
 
@@ -101,40 +101,92 @@ class DataPreparation:
         cpi_merge_dt = self.sdc['IssueDate'].dt.strftime('%Y-%m')
         self.sdc['CPI_MergeDate'] = cpi_merge_dt
         
-    def extended_preprocessing(self):
-        rank_data = pd.read_excel(input_path+'\\'+uwriter_file,
-                                  engine = 'openpyxl',
-                                  sheet_name = 'UnderwriterRank')
+        registration_days = (self.sdc['IssueDate'] - self.sdc['FilingDate'])
+        registration_days = registration_days.dt.days
+        self.sdc['RegistrationDays'] = registration_days
         
-        name = pd.DataFrame(rank_data['Underwriter Name'])
-        rank_1985_2000 = rank_data.loc[:, 'Rank8591':'Rank9200']
-        rank_2001_2020 = rank_data.loc[:, 'Rank0104':'Rank1820']
+    def extended_preprocessing(self):
+        
+        mean_price_rg = np.where(pd.isnull(self.sdc['OriginalMiddleOfFilingPriceRange']) == True,
+                                          self.sdc['AmendedMiddleOfFilingPrice'],
+                                          self.sdc['OriginalMiddleOfFilingPriceRange'])
+                                
+        min_price_rg = np.where(pd.isnull(self.sdc['OriginalLowFilingPrice']) == True,
+                                          self.sdc['AmendedLowFilingPrice'],
+                                          self.sdc['OriginalLowFilingPrice'])
+                                
+        max_price_rg = np.where(pd.isnull(self.sdc['OriginalHighFilingPrice']) == True,
+                                          self.sdc['AmendedHighFilingPrice'],
+                                          self.sdc['OriginalHighFilingPrice'])
+        
+        shares_filed = np.where(pd.isnull(self.sdc['SharesFiledSumOfAllMkts']) == True,
+                                          self.sdc['AmendedShsFiledSumOfAllMkts'],
+                                          self.sdc['SharesFiledSumOfAllMkts'])
+        
+        shares_filed = pd.Series(shares_filed,
+                                 index = self.sdc['SharesFiledSumOfAllMkts'].index)
+        shares_filed = shares_filed.str.replace(',', '')
+        shares_filed = shares_filed.astype(float)
+        
+        self.sdc['MeanPriceRange'] = mean_price_rg
+        self.sdc['MinPriceRange'] = min_price_rg
+        self.sdc['MaxPriceRange'] = max_price_rg
+        self.sdc['SharesFiled'] = shares_filed
+        
+        ritter_data = pd.read_excel(input_path+'\\'+uwriter_file,
+                                            engine = 'openpyxl',
+                                            sheet_name = 'UnderwriterRank')
+        
+        name = ritter_data['Underwriter Name']
+        name = name[:-2]
+        name = name.map(lambda x: re.sub(r'\W+', '', x))
+        name = name.str.casefold() 
+        name = pd.DataFrame(name)
+        name.columns = ['Name']
+        
+        rank_1985_2000 = ritter_data.loc[:, 'Rank8591':'Rank9200']
+        rank_2001_2020 = ritter_data.loc[:, 'Rank0104':'Rank1820']
         
         if self.end_year == '2019':
-            rank_df = name.join(rank_2001_2020)
-            rank_df = rank_df.replace(-9, np.nan)
-            rank_df = rank_df[:-2]
-            rank_df['Rank'] = rank_df.mean(axis = 1)
+            rank_data = name.join(rank_2001_2020)
         else:
-            rank_df = name.join(rank_2001_2020)
-            rank_df = rank_df.replace(-9, np.nan)
-            rank_df = rank_df[:-2]
-            rank_df['Rank'] = rank_df.mean(axis = 1)
-        
+            rank_data = name.join(rank_1985_2000)
+          
+        rank_data = rank_data.replace(-9,np.nan)
+        rank_data['MeanRank'] = rank_data.mean(axis = 1)
+        rank_data['MinRank'] = rank_data.min(axis = 1)
+        rank_data['MaxRank'] = rank_data.max(axis = 1)
+
         sdc_uwriter = self.sdc['LeadManagersLongName']
         match_results = pd.DataFrame()
         for index, value in sdc_uwriter.items():
+            print(index)
             char_pos = value.find('|')
             if char_pos != -1:
                 sdc_name = value[:char_pos]
                 sdc_name = re.sub(r'\W+', '', sdc_name)
-                sdc_name = sdc_name.casefold() #Transforms string in lower case letters
+                sdc_name = sdc_name.casefold()
             else:
                 sdc_name = value
                 sdc_name = re.sub(r'\W+', '', sdc_name)
-                sdc_name = sdc_name.casefold() 
+                sdc_name = sdc_name.casefold()
                 
+            matching = process.extractOne(sdc_name, 
+                                          rank_data['Name'])
+            
+            match_results.loc[index, 'SDC_Uwriter'] = sdc_name
+            match_results.loc[index, 'Ritter_Uwritter'] = matching[0]
+            match_results.loc[index, 'Matching_Level'] = matching[1]
+            
+        self.sdc = self.sdc.join(match_results, how = 'left')
+        
+    def data_merging(self):
+        quotes = pd.read_csv(input_path+'\\'+quotes_file)
+        # self.base_data = pd.merge(self.sdc, quotes, 
+        #                           how = 'left',
+        #                           left_on = [])
 
+        
         
             
 
