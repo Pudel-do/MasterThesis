@@ -35,8 +35,14 @@ if update_preprocess == True:
     prep_obj.build_aux_vars(update_time_range)
     prep_obj.extended_preprocessing(update_uw_matching)
     prep_obj.data_merging(adj_close_price)
-    full_data = prep_obj.full_data
     save_obj(prep_obj, output_path, prep_obj_file)
 else:
-    process_obj = get_object(output_path, prep_obj_file)
-    full_data = process_obj.full_data
+    prep_obj = get_object(output_path, prep_obj_file)
+    
+if update_feat_eng == True:
+    feat_eng_obj = FeatureEngineering(prep_obj)
+    feat_eng_obj.preprocessing()
+    feat_eng_obj.firm_features()
+    save_obj(feat_eng_obj, output_path, feat_eng_obj_file)
+    full_data = feat_eng_obj.full_data
+    
