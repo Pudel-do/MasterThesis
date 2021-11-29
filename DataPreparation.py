@@ -16,14 +16,14 @@ import sys
 exit_message = 'Download of CRSP data for quotes and returns necessary due to time period adjustments'
 
 output_path = r'C:\Users\Matthias Pudel\OneDrive\Studium\Master\Master Thesis\Empirical Evidence\Code\Output Data'
+prep_obj_file = 'Base_DataPreparation.pkl'
+uw_matching_file = 'UnderwriterMatchResults.csv'
 input_path = r'C:\Users\Matthias Pudel\OneDrive\Studium\Master\Master Thesis\Empirical Evidence\Code\Input Data'
 sdc_raw_file = 'sdc_full_raw.csv'
 total_assets_file = 'sdc_total_assets.csv'
 quotes_file = 'Quotes.csv'
 uw_file = 'UnderwriterRank.xlsx'
 cpi_file = 'CPI_85_20.xlsx'
-prep_obj_file = 'Base_DataPreparation.pkl'
-uw_matching_file = 'UnderwriterMatchResults.csv'
 
 def save_obj(obj, path, filename):
     with open(path + '\\' + filename, 'wb') as f:
@@ -68,7 +68,7 @@ class DataPreparation:
         ncusip_file = f'NCUSIP_{start_year}_{end_year}.txt'
         self.start_year = start_year
         self.end_year = end_year
-        
+# =========================        
         if update_time_range == True:
             self.sdc['NCUSIP'].to_csv(output_path+'\\'+ncusip_file,
                                       header = False,
@@ -94,15 +94,24 @@ class DataPreparation:
         self.sdc['SecondTradeDate'] = second_trade_dt
         self.sdc['LastTradeDateWK'] = last_trade_wk_dt
         self.sdc['LastTradeDateWK'] = last_trade_wk_dt
-        
+# =========================        
         cpi_merge_dt = self.sdc['IssueDate'].dt.strftime('%Y-%m')
         self.sdc['CPI_MergeDate'] = cpi_merge_dt
-        
+# =========================        
         registration_days = (self.sdc['IssueDate'] - self.sdc['FilingDate'])
         registration_days = registration_days.dt.days
         self.sdc['RegistrationDays'] = registration_days
         
     def extended_preprocessing(self, update_uw_matching):
+        exchange = self.sdc['ExchangeWhereIssuWillBeLi']
+        exchange_dummies = pd.get_dummies(exchange)
+        exchange_dummies = exchange_dummies.astype(float)
+        exchange_cols = ['AMEX', 'NASDQ', 'NYSE']
+        
+        self.sdc = pd.concat([self.sdc, 
+                              exchange_dummies[exchange_cols]], 
+                             axis = 1)
+        
         mean_prc_rg = np.where(pd.isnull(self.sdc['OriginalMiddleOfFilingPriceRange']) == True,
                                           self.sdc['AmendedMiddleOfFilingPrice'],
                                           self.sdc['OriginalMiddleOfFilingPriceRange'])
@@ -187,9 +196,7 @@ class DataPreparation:
         self.sdc = self.sdc.join(match_results, how = 'left')
         
     def data_merging(self, adj_close_price):
-        total_assets = pd.read_csv(input_path+'\\'+total_assets_file,
-                                   names = ['DealNumber', 'TotalAssets'],
-                                   header = 0)
+        total_assets = pd.read_csv(input_path+'\\'+total_assets_file)
         self.full_data = pd.merge(self.sdc,
                                   total_assets,
                                   how = 'left',
@@ -197,8 +204,14 @@ class DataPreparation:
 # =========================         
         cpi_data = pd.read_excel(input_path+'\\'+cpi_file,
                                  engine = 'openpyxl',
-                                 names = ['Date', 'CPI'])        
+                                 names = ['Date', 'CPI'])
+        base_year = '1985'
+        cpi_dt_adj = cpi_data['Date'].dt.strftime('%Y')
+        cpi_base_year = cpi_data[cpi_dt_adj == base_year]
+        cpi_base_year = cpi_base_year['CPI'].mean()
         cpi_data['Date'] = cpi_data['Date'].dt.strftime('%Y-%m')
+        
+        self.cpi_base_year = cpi_base_year
         self.full_data = pd.merge(self.full_data,
                                   cpi_data,
                                   how = 'left',
