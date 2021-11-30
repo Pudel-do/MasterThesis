@@ -152,7 +152,7 @@ class DataPreparation:
         rank_1985_2000 = ritter_data.loc[:, 'Rank8591':'Rank9200']
         rank_2001_2020 = ritter_data.loc[:, 'Rank0104':'Rank1820']
         
-        if self.end_year == '2019':
+        if self.start_date == pd.Timestamp('2000-01-01'):
             rank_data = name.join(rank_2001_2020)
         else:
             rank_data = name.join(rank_1985_2000)
@@ -205,7 +205,11 @@ class DataPreparation:
         cpi_data = pd.read_excel(input_path+'\\'+cpi_file,
                                  engine = 'openpyxl',
                                  names = ['Date', 'CPI'])
-        base_year = '1985'
+        
+        if self.start_date == pd.Timestamp('2000-01-01'):
+            base_year = '1999'
+        else:
+            base_year = '1984'
         cpi_dt_adj = cpi_data['Date'].dt.strftime('%Y')
         cpi_base_year = cpi_data[cpi_dt_adj == base_year]
         cpi_base_year = cpi_base_year['CPI'].mean()
