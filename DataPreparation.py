@@ -7,6 +7,7 @@ Created on Sat Nov 20 14:40:40 2021
 
 import pandas as pd
 import numpy as np
+from pandas.tseries.offsets import DateOffset
 from fuzzywuzzy import fuzz
 from fuzzywuzzy import process
 import pickle
@@ -43,36 +44,60 @@ class DataPreparation:
         sdc_raw = pd.read_csv(input_path+'\\'+ sdc_raw_file,
                               parse_dates = ['IssueDate', 'FilingDate'])
         
-        sdc_cols = sdc_raw.columns.to_list()
-        sdc_cols.sort()
-        
         mask =  (sdc_raw['IssueDate'] >= self.start_date) &\
                 (sdc_raw['IssueDate'] <= self.end_date) &\
+                (pd.isnull(sdc_raw['IssueDate']) == False) &\
+                (pd.isnull(sdc_raw['FilingDate']) == False) &\
                 (sdc_raw['IPO'] == 'Yes') &\
                 (sdc_raw['ADR'] == 'No') &\
                 (sdc_raw['CEF'] == 'No') &\
                 (sdc_raw['Units'] == 'No') &\
-                (pd.isna(sdc_raw['REIT']) == True) &\
-                (pd.isna(sdc_raw['CUSIP9']) == False) &\
+                (pd.isnull(sdc_raw['REIT']) == True) &\
+                (pd.isnull(sdc_raw['CUSIP9']) == False) &\
                 (sdc_raw['OfferPrice'] >= 5)
-        duplicate_col = ['Issuer']
-        
+                
+        dup_ident = ['Issuer']
         sdc = sdc_raw.loc[mask]
-        sdc = sdc.drop_duplicates(subset = duplicate_col)
+        sdc = sdc.drop_duplicates(subset = dup_ident)
         self.sdc = sdc
+# =========================  
+        ipo_port_start = self.start_date - DateOffset(years=1)
+        mask_ipo_port = (sdc_raw['IssueDate'] >= ipo_port_start) &\
+                        (sdc_raw['IssueDate'] <= self.end_date) &\
+                        (pd.isnull(sdc_raw['IssueDate']) == False) &\
+                        (pd.isnull(sdc_raw['FilingDate']) == False) &\
+                        (sdc_raw['IPO'] == 'Yes') &\
+                        (sdc_raw['ADR'] == 'No') &\
+                        (sdc_raw['CEF'] == 'No') &\
+                        (sdc_raw['Units'] == 'No') &\
+                        (pd.isna(sdc_raw['REIT']) == True) &\
+                        (pd.isna(sdc_raw['CUSIP9']) == False) &\
+                        (sdc_raw['OfferPrice'] >= 5)
+                        
+        ipo_port_data = sdc_raw.loc[mask_ipo_port]
+        ipo_port_data = ipo_port_data.drop_duplicates(subset = dup_ident)
+        self.ipo_port_data = ipo_port_data
         
     def build_aux_vars(self, update_time_range):
         self.sdc['NCUSIP'] = self.sdc['CUSIP9'].str[:8]
         start_year = self.start_date.strftime('%Y')
         end_year = self.end_date.strftime('%Y')
-        ncusip_file = f'NCUSIP_{start_year}_{end_year}.txt'
+        ncusip_file = f'NCUSIP_{start_year}_{end_year}_Quotes.txt'
         self.start_year = start_year
         self.end_year = end_year
-# =========================        
+# =========================
+        ncusips_port = self.ipo_port_data['CUSIP9'].str[:8]
+        ncusip_file_port = f'NCUSIP_{start_year}_{end_year}_Portfolio.txt'
+# =========================    
         if update_time_range == True:
             self.sdc['NCUSIP'].to_csv(output_path+'\\'+ncusip_file,
                                       header = False,
                                       index = False)
+            
+            ncusips_port.to_csv(output_path+'\\'+ncusip_file_port,
+                                      header = False,
+                                      index = False)
+            
             sys.exit(exit_message)
         
         onebday_offset = pd.offsets.BusinessDay(1)
