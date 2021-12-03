@@ -10,7 +10,7 @@ import numpy as np
 from DataPreparation import *
 
 feat_eng_obj_file = 'Base_FeatureEngineering.pkl'
-returns_file = 'IPO_Returns_TEST.csv'
+returns_file = 'IPO_Returns.csv'
 index_returns_file = 'CRSP_Market_Returns.csv'
 
 
@@ -106,7 +106,8 @@ class FeatureEngineering:
     def public_features(self, ew_rets, period_length):
         ipo_rets_data = pd.read_csv(input_path+'\\'+returns_file,
                                     usecols = ['date', 'NCUSIP', 'RETX'],
-                                    parse_dates = ['date'])
+                                    parse_dates = ['date'],
+                                    index_col = ['date'])
         
         adj_col = ipo_rets_data['RETX']
         ipo_rets = ipo_rets_data.loc[adj_col.str.isalpha() == False]
@@ -123,6 +124,7 @@ class FeatureEngineering:
             
         port_data = self.prep_obj.ipo_port_data
         for index, row in self.full_data.iterrows():
+            print(index)
             if period_length != None:
                 dt_offset = pd.offsets.BusinessDay(period_length)
                 start_date = row['IssueDate'] - dt_offset
@@ -144,15 +146,6 @@ class FeatureEngineering:
                 port_period = pd.DataFrame(port_period)
                 port_period.columns = ['Date']
                 port_period = port_period.set_index('Date')
-            
-            #Testing Period
-            port_period = pd.date_range(start = '2011-05-05',
-                                            end = '2011-05-27',
-                                            freq = 'B')
-                
-            port_period = pd.DataFrame(port_period)
-            port_period.columns = ['Date']
-            port_period = port_period.set_index('Date')
 # =========================
             index_ret = port_period.join(index_rets, how = 'left')
             index_ret = index_ret.sum()
@@ -174,15 +167,9 @@ class FeatureEngineering:
                 port_comp = port_comp['NCUSIP']
                 port_comp = port_comp.drop_duplicates()
                 
-                #In final version must be set to True
-                match_idx = ipo_rets.isin(port_comp)
-                match_idx = match_idx[match_idx['NCUSIP'] == False]
-                match_idx = match_idx.index
-                
-                comp_rets = ipo_rets.loc[match_idx]
-                comp_rets = comp_rets.set_index('date')
-                comp_rets = comp_rets.join(port_period, 
-                                           how = 'inner')
+                match_dt = port_period.join(ipo_rets, how = 'inner')
+                comp_ident = match_dt['NCUSIP'].isin(port_comp)
+                comp_rets = match_dt.loc[comp_ident]
 
                 noa = len(port_comp)
                 sector_ret = comp_rets['RETX'].sum()
@@ -190,8 +177,8 @@ class FeatureEngineering:
                 
                 col_name = ['SectorReturn']
                 self.full_data.loc[index, col_name] = sector_ret
-                
-                print('dfa')
+            
+
                 
                 
 
