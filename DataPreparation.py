@@ -19,12 +19,13 @@ exit_message = 'Download of CRSP data for quotes and returns necessary due to ti
 output_path = r'C:\Users\Matthias Pudel\OneDrive\Studium\Master\Master Thesis\Empirical Evidence\Code\Output Data'
 prep_obj_file = 'Base_DataPreparation.pkl'
 uw_matching_file = 'UnderwriterMatchResults.csv'
+
 input_path = r'C:\Users\Matthias Pudel\OneDrive\Studium\Master\Master Thesis\Empirical Evidence\Code\Input Data'
 sdc_raw_file = 'sdc_full_raw.csv'
 total_assets_file = 'sdc_total_assets.csv'
-quotes_file = 'Quotes.csv'
+quotes_file = 'IPO_Quotes.csv'
 uw_file = 'UnderwriterRank.xlsx'
-cpi_file = 'CPI_85_20.xlsx'
+cpi_file = 'CPI_80_21.xlsx'
 
 def save_obj(obj, path, filename):
     with open(path + '\\' + filename, 'wb') as f:
@@ -78,20 +79,20 @@ class DataPreparation:
         ipo_port_data = ipo_port_data.drop_duplicates(subset = dup_ident)
         self.ipo_port_data = ipo_port_data
         
-    def build_aux_vars(self, update_time_range):
+    def build_aux_vars(self, adj_time_range):
         start_year = self.start_date.strftime('%Y')
         end_year = self.end_date.strftime('%Y')
         ncusip_quotes = self.sdc['CUSIP9'].str[:8]
         ncusip_port = self.ipo_port_data['CUSIP9'].str[:8]
         ncusip_quote_file = f'NCUSIP_{start_year}_{end_year}_Quotes.txt'
-        ncusip_port_file = f'NCUSIP_{start_year}_{end_year}_Portfolio.txt'
+        ncusip_port_file = f'NCUSIP_{start_year}_{end_year}_PortfolioReturns.txt'
         
         self.sdc['NCUSIP'] = ncusip_quotes
         self.ipo_port_data['NCUSIP'] = ncusip_port
         self.start_year = start_year
         self.end_year = end_year
   
-        if update_time_range == True:
+        if adj_time_range == True:
             ncusip_quotes.to_csv(output_path+'\\'+ncusip_quote_file,
                                  header = False,
                                  index = False)
@@ -129,7 +130,7 @@ class DataPreparation:
         registration_days = registration_days.dt.days
         self.sdc['RegistrationDays'] = registration_days
         
-    def extended_preprocessing(self, update_uw_matching):
+    def extended_preprocessing(self, adj_uw_matching):
         exchange = self.sdc['ExchangeWhereIssuWillBeLi']
         exchange_dummies = pd.get_dummies(exchange)
         exchange_dummies = exchange_dummies.astype(float)
@@ -195,7 +196,7 @@ class DataPreparation:
 
         sdc_uwriter = self.sdc['LeadManagersLongName']
         match_results = pd.DataFrame()
-        if update_uw_matching == True:
+        if adj_uw_matching == True:
             for index, value in sdc_uwriter.items():
                 print(index)
                 char_pos = value.find('|')
@@ -258,6 +259,8 @@ class DataPreparation:
 # ========================= 
         quotes = pd.read_csv(input_path+'\\'+quotes_file,
                              parse_dates = ['date'])
+        
+        quotes['PRC'] = quotes['PRC'].abs()
         quotes_cols = ['date', 'NCUSIP', 'PRC', 'OPENPRC']
         
         if adj_close_price == False:
@@ -311,7 +314,7 @@ class DataPreparation:
                                      self.full_data['LastClosePriceWK'],
                                      self.full_data['ClosePrice'])
             self.full_data['ClosePrice'] = close_prc_ext
-            
+
             
 
 
