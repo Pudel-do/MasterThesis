@@ -79,27 +79,29 @@ class DataPreparation:
         self.ipo_port_data = ipo_port_data
         
     def build_aux_vars(self, update_time_range):
-        self.sdc['NCUSIP'] = self.sdc['CUSIP9'].str[:8]
         start_year = self.start_date.strftime('%Y')
         end_year = self.end_date.strftime('%Y')
-        ncusip_file = f'NCUSIP_{start_year}_{end_year}_Quotes.txt'
+        ncusip_quotes = self.sdc['CUSIP9'].str[:8]
+        ncusip_port = self.ipo_port_data['CUSIP9'].str[:8]
+        ncusip_quote_file = f'NCUSIP_{start_year}_{end_year}_Quotes.txt'
+        ncusip_port_file = f'NCUSIP_{start_year}_{end_year}_Portfolio.txt'
+        
+        self.sdc['NCUSIP'] = ncusip_quotes
+        self.ipo_port_data['NCUSIP'] = ncusip_port
         self.start_year = start_year
         self.end_year = end_year
-# =========================
-        ncusips_port = self.ipo_port_data['CUSIP9'].str[:8]
-        ncusip_file_port = f'NCUSIP_{start_year}_{end_year}_Portfolio.txt'
-# =========================    
+  
         if update_time_range == True:
-            self.sdc['NCUSIP'].to_csv(output_path+'\\'+ncusip_file,
-                                      header = False,
-                                      index = False)
+            ncusip_quotes.to_csv(output_path+'\\'+ncusip_quote_file,
+                                 header = False,
+                                 index = False)
             
-            ncusips_port.to_csv(output_path+'\\'+ncusip_file_port,
-                                      header = False,
-                                      index = False)
+            ncusip_port.to_csv(output_path+'\\'+ncusip_port_file,
+                               header = False,
+                               index = False)
             
             sys.exit(exit_message)
-        
+# =========================        
         onebday_offset = pd.offsets.BusinessDay(1)
         twobday_offset = pd.offsets.BusinessDay(2)
         first_trade_dt = self.sdc['IssueDate'] + onebday_offset

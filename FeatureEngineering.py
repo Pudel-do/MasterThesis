@@ -10,9 +10,13 @@ import numpy as np
 from DataPreparation import *
 
 feat_eng_obj_file = 'Base_FeatureEngineering.pkl'
+returns_file = 'IPO_Returns_TEST.csv'
+index_returns_file = 'CRSP_Market_Returns.csv'
+
 
 model_cols = ['InitialReturn', 'UnderwriterRank', 'TechDummy',
-              'TotalAssets', 'AMEX', 'NASDQ', 'NYSE']
+              'TotalAssets', 'AMEX', 'NASDQ', 'NYSE',
+              'RegistrationDays']
 
 
 class FeatureEngineering:
@@ -20,8 +24,6 @@ class FeatureEngineering:
         self.prep_obj = prep_obj
         self.full_data = prep_obj.full_data
         cols = self.full_data.columns.to_list()
-        cols.sort()
-        print(cols)
         
     def preprocessing(self):
         total_assets = self.full_data['TotalAssetsBeforeTheOfferingMil']
@@ -70,12 +72,12 @@ class FeatureEngineering:
         
         self.full_data['UnderwriterRank'] = rank
 # =========================
-        tech = 1
-        non_tech = 0
+        tech_id = 1
+        non_tech_id = 0
         sector = self.full_data['Sector']
         tech_dummy = np.where(sector == 'Non-Hitech',
-                              non_tech,
-                              tech)
+                              non_tech_id,
+                              tech_id)
         nan_ident = pd.isnull(self.full_data['Sector']) == True
         tech_nan_idx = self.full_data.loc[nan_ident].index
         self.full_data['TechDummy'] = tech_dummy
@@ -101,6 +103,89 @@ class FeatureEngineering:
         exchange_cols = ['AMEX', 'NASDQ', 'NYSE']
         self.full_data.loc[exchange_nan_idx, exchange_cols] = np.nan
         
-        print('kdjafö')
+    def public_features(self, ew_rets, period_length):
+        ipo_rets_data = pd.read_csv(input_path+'\\'+returns_file,
+                                    usecols = ['date', 'NCUSIP', 'RETX'],
+                                    parse_dates = ['date'])
+        
+        adj_col = ipo_rets_data['RETX']
+        ipo_rets = ipo_rets_data.loc[adj_col.str.isalpha() == False]
+        ipo_rets['RETX'] = ipo_rets['RETX'].astype(float)
+        
+        index_rets_data = pd.read_csv(input_path+'\\'+index_returns_file,
+                                      parse_dates = ['DATE'],
+                                      index_col = 'DATE')
+        
+        if ew_rets == True:
+            index_rets = index_rets_data['ewretx']
+        else:
+            index_rets = index_rets_data['vwretx']
+            
+        port_data = self.prep_obj.ipo_port_data
+        for index, row in self.full_data.iterrows():
+            if period_length != None:
+                dt_offset = pd.offsets.BusinessDay(period_length)
+                start_date = row['IssueDate'] - dt_offset
+                end_date = row['IssueDate']
+                port_period = pd.date_range(start = start_date,
+                                            end = end_date,
+                                            freq = 'B')
+            
+                port_period = pd.DataFrame(port_period)
+                port_period.columns = ['Date']
+                port_period = port_period.set_index('Date')  
+            else:
+                start_date = row['FilingDate']
+                end_date = row['IssueDate']
+                port_period = pd.date_range(start = start_date,
+                                            end = end_date,
+                                            freq = 'B')
+                
+                port_period = pd.DataFrame(port_period)
+                port_period.columns = ['Date']
+                port_period = port_period.set_index('Date')
+            
+            #Testing Period
+            port_period = pd.date_range(start = '2011-05-05',
+                                            end = '2011-05-27',
+                                            freq = 'B')
+                
+            port_period = pd.DataFrame(port_period)
+            port_period.columns = ['Date']
+            port_period = port_period.set_index('Date')
+                
+            last_year = row['IssueDate'] - DateOffset(years=1)
+            last_month = row['IssueDate'] - DateOffset(months=1)
+            sector = row['Sector']
+            
+            if pd.isnull(sector) == False:
+                mask = (port_data['IssueDate'] >= last_year) &\
+                       (port_data['IssueDate'] <= last_month) &\
+                       (port_data['Sector'] == sector)
+                   
+                port_comp = port_data.loc[mask]
+                port_comp = port_comp['NCUSIP']
+                port_comp = port_comp.drop_duplicates()
+                
+                #In final version must be set to True
+                match_id = ipo_rets.isin(port_comp)
+                match_id = match_id[match_id['NCUSIP'] == False]
+                match_id = match_id.index
+                
+                match_comp = ipo_rets.loc[match_id]
+                match_comp = match_comp.set_index('date')
+                
+                port_rets = match_comp.join(port_period, 
+                                            how = 'inner')
 
+                print('daf')
+                
+                
+
+        
+
+        
+        
+        
+        
         
