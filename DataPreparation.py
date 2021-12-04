@@ -7,34 +7,12 @@ Created on Sat Nov 20 14:40:40 2021
 
 import pandas as pd
 import numpy as np
+import re
+import sys
 from pandas.tseries.offsets import DateOffset
 from fuzzywuzzy import fuzz
 from fuzzywuzzy import process
-import pickle
-import re
-import sys
-
-exit_message = 'Download of CRSP data for quotes and returns necessary due to time period adjustments'
-
-output_path = r'C:\Users\Matthias Pudel\OneDrive\Studium\Master\Master Thesis\Empirical Evidence\Code\Output Data'
-prep_obj_file = 'Base_DataPreparation.pkl'
-uw_matching_file = 'UnderwriterMatchResults.csv'
-
-input_path = r'C:\Users\Matthias Pudel\OneDrive\Studium\Master\Master Thesis\Empirical Evidence\Code\Input Data'
-sdc_raw_file = 'sdc_full_raw.csv'
-total_assets_file = 'sdc_total_assets.csv'
-quotes_file = 'IPO_Quotes.csv'
-uw_file = 'UnderwriterRank.xlsx'
-cpi_file = 'CPI_80_21.xlsx'
-
-def save_obj(obj, path, filename):
-    with open(path + '\\' + filename, 'wb') as f:
-        pickle.dump(obj, f, pickle.HIGHEST_PROTOCOL)
-        
-def get_object(path, filename):
-    with open(path + '\\' + filename, 'rb') as f:
-        return pickle.load(f)
-
+from GetData import *
 
 class DataPreparation:
     def __init__(self, start_date, end_date):
@@ -86,7 +64,6 @@ class DataPreparation:
         ncusip_port = self.ipo_port_data['CUSIP9'].str[:8]
         ncusip_quote_file = f'NCUSIP_{start_year}_{end_year}_Quotes.txt'
         ncusip_port_file = f'NCUSIP_{start_year}_{end_year}_PortfolioReturns.txt'
-        
         self.sdc['NCUSIP'] = ncusip_quotes
         self.ipo_port_data['NCUSIP'] = ncusip_port
         self.start_year = start_year
@@ -116,8 +93,8 @@ class DataPreparation:
             last_bday = day_rg[-1] - onebday_offset
             if last_bday == value:
                 last_bday = last_bday + pd.Timedelta('7 days')
-            last_trade_wk_dt.loc[index] = last_bday
-
+            last_trade_wk_dt.loc[index] = last_trade_wk_dt
+            
         self.sdc['FirstTradeDate'] = first_trade_dt
         self.sdc['SecondTradeDate'] = second_trade_dt
         self.sdc['LastTradeDateWK'] = last_trade_wk_dt
@@ -139,7 +116,7 @@ class DataPreparation:
         self.sdc = pd.concat([self.sdc, 
                               exchange_dummies[exchange_cols]], 
                              axis = 1)
-        
+# =========================        
         mean_prc_rg = np.where(pd.isnull(self.sdc['OriginalMiddleOfFilingPriceRange']) == True,
                                           self.sdc['AmendedMiddleOfFilingPrice'],
                                           self.sdc['OriginalMiddleOfFilingPriceRange'])
@@ -152,6 +129,10 @@ class DataPreparation:
                                           self.sdc['AmendedHighFilingPrice'],
                                           self.sdc['OriginalHighFilingPrice'])
         
+        self.sdc['MeanPriceRange'] = mean_prc_rg
+        self.sdc['MinPriceRange'] = min_prc_rg
+        self.sdc['MaxPriceRange'] = max_prc_rg
+# =========================         
         shares_filed = np.where(pd.isnull(self.sdc['SharesFiledSumOfAllMkts']) == True,
                                           self.sdc['AmendedShsFiledSumOfAllMkts'],
                                           self.sdc['SharesFiledSumOfAllMkts'])
@@ -160,10 +141,6 @@ class DataPreparation:
         shares_filed = pd.Series(shares_filed, index = shares_filed_idx)
         shares_filed = shares_filed.str.replace(',', '')
         shares_filed = shares_filed.astype(float)
-        
-        self.sdc['MeanPriceRange'] = mean_prc_rg
-        self.sdc['MinPriceRange'] = min_prc_rg
-        self.sdc['MaxPriceRange'] = max_prc_rg
         self.sdc['SharesFiled'] = shares_filed
 # =========================         
         ritter_data = pd.read_excel(input_path+'\\'+uw_file,
@@ -189,9 +166,9 @@ class DataPreparation:
         rank_data['MeanRank'] = rank_data.mean(axis = 1)
         rank_data['MinRank'] = rank_data.min(axis = 1)
         rank_data['MaxRank'] = rank_data.max(axis = 1)
-        
         rank_data_cols = ['Name', 'MeanRank',
                           'MinRank', 'MaxRank']
+        
         self.rank_data = rank_data[rank_data_cols]
 
         sdc_uwriter = self.sdc['LeadManagersLongName']
@@ -218,8 +195,9 @@ class DataPreparation:
                 
             match_results.to_csv(output_path+'\\'+uw_matching_file)
         else:
+            index_col = ['Unnamed: 0']
             match_results = pd.read_csv(output_path+'\\'+uw_matching_file,
-                                        index_col = 'Unnamed: 0')
+                                        index_col = index_col)
             
         self.sdc = self.sdc.join(match_results, how = 'left')
         
@@ -234,10 +212,10 @@ class DataPreparation:
                                  engine = 'openpyxl',
                                  names = ['Date', 'CPI'])
         
-        if self.start_date == pd.Timestamp('2000-01-01'):
-            base_year = '1999'
-        else:
-            base_year = '1984'
+        start = self.start_date
+        base_year = start - DateOffset(years=1)
+        base_year = base_year.strftime('%Y')
+        
         cpi_dt_adj = cpi_data['Date'].dt.strftime('%Y')
         cpi_base_year = cpi_data[cpi_dt_adj == base_year]
         cpi_base_year = cpi_base_year['CPI'].mean()
