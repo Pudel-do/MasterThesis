@@ -37,7 +37,7 @@ class FeatureEngineering:
         cpi_disc_factor = cpi_base_year / self.full_data['CPI']
         self.full_data['CPI_DiscountFactor'] = cpi_disc_factor
 # =========================
-        sector_sdc = self.prep_obj.ipo_port_data['HighTechIndustryGroup']
+        sector_sdc = self.prep_obj.port_data['HighTechIndustryGroup']
         sector = pd.Series([])
         for index, value in sector_sdc.items():
             if pd.isnull(value) == False:
@@ -50,10 +50,10 @@ class FeatureEngineering:
                 sector_name = np.nan
             sector.loc[index] = sector_name
             
-        self.prep_obj.ipo_port_data['Sector'] = sector
+        self.prep_obj.port_data['Sector'] = sector
         merge_cols = ['DealNumber', 'Sector']
         self.full_data = pd.merge(self.full_data,
-                                  self.prep_obj.ipo_port_data[merge_cols],
+                                  self.prep_obj.port_data[merge_cols],
                                   how = 'left',
                                   on = 'DealNumber')
 
@@ -132,11 +132,19 @@ class FeatureEngineering:
                 index_rets = index_rets_data['ewretx']
             else:
                 index_rets = index_rets_data['vwretx']
-            
-            port_data = self.prep_obj.ipo_port_data
+                
+            iter_count = 0
+            progress = 100
+            print('Public features construction started')
+            port_data = self.prep_obj.port_data
             public_features = pd.DataFrame()
             for index, row in self.full_data.iterrows():
-                print(index)
+                deal_num = row['DealNumber']
+                col_name = ['DealNumber']
+                public_features.loc[index, col_name] = deal_num
+                iter_count += 1
+                if iter_count % progress == 0:
+                    print(f'Progress: {iter_count} items')
                 if port_days != None:
                     dt_offset = pd.offsets.BusinessDay(port_days)
                     start_date = row['IssueDate'] - dt_offset
@@ -196,13 +204,24 @@ class FeatureEngineering:
                 else:
                     public_features.loc[index, col_name] = np.nan
             
-            public_features.to_csv(output_path+'\\'+public_feat_file)
-            self.full_data = self.full_data.join(public_features)
+            start_year = self.prep_obj.start_year
+            end_year = self.prep_obj.end_year
+            file_name = public_feat_file
+            file_name = f'{start_year}_{end_year}_{file_name}'
+            public_features.to_csv(output_path+'\\'+file_name, index = False)
+            print('Public features construction finished')
+
         else:
-            public_features = pd.read_csv(output_path+'\\'+public_feat_file,
-                                    index_col = 'Unnamed: 0')
-            
-            self.full_data = self.full_data.join(public_features)
+            start_year = self.prep_obj.start_year
+            end_year = self.prep_obj.end_year
+            file_name = public_feat_file
+            file_name = f'{start_year}_{end_year}_{file_name}'
+            public_features = pd.read_csv(output_path+'\\'+file_name)
+        
+        self.full_data = pd.merge(self.full_data,
+                                  public_features,
+                                  how = 'left',
+                                  on = 'DealNumber')
             
     def private_features(self):
         offer_prc = self.full_data['OfferPrice']
