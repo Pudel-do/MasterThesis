@@ -15,14 +15,17 @@ warnings.filterwarnings("ignore")
 # ===========================================
 start_date = pd.Timestamp('2000-01-01')
 end_date = pd.Timestamp('2019-12-31')
+start_year = start_date.strftime('%Y')
+end_year = end_date.strftime('%Y')
+
 from DataPreparation import *
-adj_preprocess = False
+adj_preprocess = True
 adj_uw_matching = False
 adj_time_range = False
 adj_close_price = False
 
 from FeatureEngineering import *
-adj_feat_eng = False
+adj_feat_eng = True
 adj_public_feat = False
 index_weight = 'Equal'
 port_days = 15
@@ -33,13 +36,17 @@ scale_factor = 100
 
 if adj_preprocess == True:
     prep_obj = DataPreparation(start_date, end_date)
-    prep_obj.rough_preprocessing()
-    prep_obj.build_aux_vars(adj_time_range)
+    prep_obj.rough_preprocessing(adj_time_range)
+    prep_obj.build_aux_vars()
     prep_obj.extended_preprocessing(adj_uw_matching)
     prep_obj.data_merging(adj_close_price)
-    save_obj(prep_obj, output_path, prep_obj_file)
+    obj_file = prep_obj_file
+    obj_file = f'{start_year}_{end_year}_{obj_file}'
+    save_obj(prep_obj, output_path, obj_file)
 else:
-    prep_obj = get_object(output_path, prep_obj_file)
+    obj_file = prep_obj_file
+    obj_file = f'{start_year}_{end_year}_{obj_file}'
+    prep_obj = get_object(output_path, obj_file)
     
 if adj_feat_eng == True:
     feat_eng_obj = FeatureEngineering(prep_obj, scale_factor)
@@ -47,13 +54,18 @@ if adj_feat_eng == True:
     feat_eng_obj.firm_features()
     feat_eng_obj.public_features(index_weight, port_days, adj_public_feat)
     feat_eng_obj.private_features()
-    save_obj(feat_eng_obj, output_path, feat_eng_obj_file)
+    obj_file = feat_eng_obj_file
+    obj_file = f'{start_year}_{end_year}_{obj_file}'
+    save_obj(feat_eng_obj, output_path, obj_file)
     full_data = feat_eng_obj.full_data
     model_data = feat_eng_obj.model_data
 else:
-    feat_eng_obj = get_object(output_path, feat_eng_obj_file)
+    obj_file = feat_eng_obj_file
+    obj_file = f'{start_year}_{end_year}_{obj_file}'
+    feat_eng_obj = get_object(output_path, obj_file)
     full_data = feat_eng_obj.full_data
     model_data = feat_eng_obj.model_data
     
-x = model_data.isna().sum()
+reg_data = model_data.dropna()
+
     
