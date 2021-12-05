@@ -23,8 +23,10 @@ class DataPreparation:
         sdc_raw = pd.read_csv(input_path+'\\'+ sdc_raw_file,
                               parse_dates = ['IssueDate', 'FilingDate'])
         
-        mask =  (sdc_raw['IssueDate'] >= self.start_date) &\
+        dup_ident = ['Issuer']
+        mask = (sdc_raw['IssueDate'] >= self.start_date) &\
                 (sdc_raw['IssueDate'] <= self.end_date) &\
+                (sdc_raw['FilingDate'] <= self.end_date) &\
                 (pd.isnull(sdc_raw['IssueDate']) == False) &\
                 (pd.isnull(sdc_raw['FilingDate']) == False) &\
                 (sdc_raw['IPO'] == 'Yes') &\
@@ -34,8 +36,7 @@ class DataPreparation:
                 (pd.isnull(sdc_raw['REIT']) == True) &\
                 (pd.isnull(sdc_raw['CUSIP9']) == False) &\
                 (sdc_raw['OfferPrice'] >= 5)
-                
-        dup_ident = ['Issuer']
+        
         sdc = sdc_raw.loc[mask]
         sdc = sdc.drop_duplicates(subset = dup_ident)
         self.sdc = sdc
@@ -43,6 +44,7 @@ class DataPreparation:
         ipo_port_start = self.start_date - DateOffset(years=1)
         mask_ipo_port = (sdc_raw['IssueDate'] >= ipo_port_start) &\
                         (sdc_raw['IssueDate'] <= self.end_date) &\
+                        (sdc_raw['FilingDate'] <= self.end_date) &\
                         (pd.isnull(sdc_raw['IssueDate']) == False) &\
                         (pd.isnull(sdc_raw['FilingDate']) == False) &\
                         (sdc_raw['IPO'] == 'Yes') &\
@@ -93,11 +95,10 @@ class DataPreparation:
             last_bday = day_rg[-1] - onebday_offset
             if last_bday == value:
                 last_bday = last_bday + pd.Timedelta('7 days')
-            last_trade_wk_dt.loc[index] = last_trade_wk_dt
+            last_trade_wk_dt.loc[index] = last_bday
             
         self.sdc['FirstTradeDate'] = first_trade_dt
         self.sdc['SecondTradeDate'] = second_trade_dt
-        self.sdc['LastTradeDateWK'] = last_trade_wk_dt
         self.sdc['LastTradeDateWK'] = last_trade_wk_dt
 # =========================        
         cpi_merge_dt = self.sdc['IssueDate'].dt.strftime('%Y-%m')
