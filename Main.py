@@ -19,20 +19,34 @@ start_year = start_date.strftime('%Y')
 end_year = end_date.strftime('%Y')
 
 from DataPreparation import *
-adj_preprocess = True
+adj_preprocess = False
 adj_uw_matching = False
 adj_time_range = False
 adj_close_price = False
 
 from FeatureEngineering import *
-adj_feat_eng = True
+adj_feat_eng = False
 adj_public_feat = False
 index_weight = 'Equal'
 port_days = 15
 scale_factor = 100
+
+from Regression import *
+adj_reg_cols = True
+reg_cols = [
+    'InitialReturn', 
+    'UnderwriterRank', 'TotalAssets',
+    #'TechDummy', 'AMEX', 'NASDQ', 'NYSE',
+    'MarketReturn', 
+    'MarketReturnSlopeDummy',
+    'SectorReturn', 
+    'SectorReturnSlopeDummy',
+    'PriceRevision', 'PriceRevisionSlopeDummy',
+    'ProceedsRevision'
+    ]
 # ===========================================
 # Prediction Model - Parameter and Settings
-# ===========================================F
+# ===========================================
 
 if adj_preprocess == True:
     prep_obj = DataPreparation(start_date, end_date)
@@ -66,6 +80,13 @@ else:
     full_data = feat_eng_obj.full_data
     model_data = feat_eng_obj.model_data
     
-reg_data = model_data.dropna()
+reg_obj = Regression(model_data, start_year, end_year)
+reg_obj.preprocessing(reg_cols)
+reg_obj.ols_regression()
+reg_obj.fmb_regression(start_date, end_date)
+reg_obj.build_results(adj_reg_cols)
+obj_file = reg_obj_file
+obj_file = f'{start_year}_{end_year}_{obj_file}'
+save_obj(reg_obj, output_path, obj_file)
 
     
