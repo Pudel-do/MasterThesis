@@ -11,10 +11,20 @@ import numpy as np
 exit_message = 'Download of CRSP data for quotes and returns necessary due to time period adjustments'
 
 output_path = r'C:\Users\Matthias Pudel\OneDrive\Studium\Master\Master Thesis\Empirical Evidence\Code\Output Data'
-prep_obj_file = 'Base_DataPreparation.pkl'
-feat_eng_obj_file = 'Base_FeatureEngineering.pkl'
+prep_obj_file = 'DataPreparation.pkl'
+feat_eng_obj_file = 'FeatureEngineering.pkl'
+reg_obj_file = 'Regression.pkl'
 uw_matching_file = 'UnderwriterMatchResults.csv'
 public_feat_file = 'PublicFeatures.csv'
+ols_result_file = 'RegressionResult_OLS.csv'
+ols_key_fig_file = 'KeyFigures_OLS.csv'
+ols_agg_result_file = 'AggregatedRegressionResult_OLS.csv'
+ols_agg_key_file = 'AggregatedKeyFigures_OLS.csv'
+fmb_result_file = 'RegressionResult_FMB.csv'
+fmb_key_fig_file = 'KeyFigures_OLS.csv'
+fmb_agg_result_file = 'AggregatedRegressionResult_FMB.csv'
+fmb_agg_key_file = 'AggregatedKeyFigures_FMB.csv'
+
 
 input_path = r'C:\Users\Matthias Pudel\OneDrive\Studium\Master\Master Thesis\Empirical Evidence\Code\Input Data'
 sdc_raw_file = 'sdc_full_raw.csv'
