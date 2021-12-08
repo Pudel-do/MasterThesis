@@ -12,12 +12,11 @@ import statsmodels.stats.weightstats as smw
 from GetData import *
 
 class Regression:
-    def __init__(self, model_data, start_year, end_year):
-        self.model_data = model_data
+    def __init__(self, feat_eng_obj, start_year, end_year):
+        self.feat_eng_obj = feat_eng_obj
+        self.model_data = feat_eng_obj.model_data
         self.start_year = start_year
         self.end_year = end_year
-        self.coef_col = 'Coeff'
-        self.pval_col = 'pvalue'
         
     def preprocessing(self, reg_cols):
         base = self.model_data
@@ -34,7 +33,7 @@ class Regression:
         self.endog_var = endog_var
         self.exog_var = exog_var
         
-        key_figures = ['RSquared']
+        key_figures = ['RSquared', 'Count']
         key_col = 'Value'
         self.key_figures = key_figures
         self.key_col = key_col
@@ -49,23 +48,25 @@ class Regression:
         ols_reg = ols_reg.fit(cov_type='HC0')
         
         coefs = ols_reg.params
-        coefs.name = self.coef_col
+        coefs.name = 'Coeff'
         coefs = pd.DataFrame(coefs)
         pvalues = ols_reg.pvalues
-        pvalues.name = self.pval_col
+        pvalues.name = 'pvalue'
         pvalues = pd.DataFrame(pvalues)
         r_sqr = ols_reg.rsquared_adj
+        n_obs = ols_reg.nobs
 # =========================
 # Dataframe key_figs can be extended 
 # by furter key figures at this point
-        key_figs = pd.DataFrame()
-        key_figs.loc['RSquared', self.key_col] = r_sqr
+        keyfig = pd.DataFrame()
+        keyfig.loc['RSquared', self.key_col] = r_sqr
+        keyfig.loc['Count', self.key_col] = n_obs
         result = coefs.join(pvalues)
         full_result = ols_reg.summary()
         
         self.ols_result = result
         self.ols_full_result = full_result
-        self.ols_key_figs = key_figs
+        self.ols_keyfig = keyfig
             
     def fmb_regression(self, start_date, end_date):
         self.start = start_date
@@ -80,7 +81,7 @@ class Regression:
         
         coefs = pd.DataFrame()
         pvalues = pd.DataFrame()
-        key_figs = pd.DataFrame()
+        key_fig = pd.DataFrame()
         for index, value in period.iteritems():
             year_filter = self.base['IssueYear'] == value
             reg_data = self.base[year_filter]
@@ -103,26 +104,26 @@ class Regression:
 # =========================
 # Dataframe key_figs can be extended 
 # by furter key figures at this point            
-            key_figs.loc['RSquared', value] = r_sqr
-            key_figs.loc['AmountItems', value] = nobs
+            key_fig.loc['RSquared', value] = r_sqr
+            key_fig.loc['Count', value] = nobs
             
         avg_coefs = coefs.mean(axis = 1)
-        avg_coefs.name = self.coef_col
+        avg_coefs.name = 'Coeff'
         avg_coefs = pd.DataFrame(avg_coefs)
         avg_pvalues = pvalues.mean(axis = 1)
-        avg_pvalues.name = self.pval_col
+        avg_pvalues.name = 'pvalue'
         avg_pvalues = pd.DataFrame(avg_pvalues)
         avg_result = avg_coefs.join(avg_pvalues)
     
-        avg_key_figs = key_figs.mean(axis = 1)
-        avg_key_figs = avg_key_figs.loc[self.key_figures]
-        avg_key_figs.name = self.key_col
-        avg_key_figs = pd.DataFrame(avg_key_figs)
+        avg_keyfig = key_fig.mean(axis = 1)
+        avg_keyfig = avg_keyfig.loc[self.key_figures]
+        avg_keyfig.name = self.key_col
+        avg_keyfig = pd.DataFrame(avg_keyfig)
         
         self.fmb_coefs = coefs
         self.fmb_pvalues = pvalues
         self.fmb_result = avg_result
-        self.fmb_key_figs = avg_key_figs
+        self.fmb_keyfig = avg_keyfig
         
     def build_results(self, adj_reg_cols):
         start_year = self.start_year
@@ -134,64 +135,77 @@ class Regression:
         file = f'{start_year}_{end_year}_{file}'
         ols_result.to_csv(output_path+'\\'+file)
         
-        ols_key_figs = self.ols_key_figs
-        file = ols_key_fig_file
+        ols_keyfig = self.ols_keyfig
+        file = ols_keyfig_file
         file = f'{start_year}_{end_year}_{file}'
-        ols_key_figs.to_csv(output_path+'\\'+file)
+        ols_keyfig.to_csv(output_path+'\\'+file)
 # =========================        
         fmb_result = self.fmb_result
         file = fmb_result_file
         file = f'{start_year}_{end_year}_{file}'
         fmb_result.to_csv(output_path+'\\'+file)
         
-        fmb_key_figs = self.fmb_key_figs
-        file = fmb_key_fig_file
+        fmb_keyfig = self.fmb_keyfig
+        file = fmb_keyfig_file
         file = f'{start_year}_{end_year}_{file}'
-        fmb_key_figs.to_csv(output_path+'\\'+file)
-# =========================         
-        file_ols = ols_agg_result_file
+        fmb_keyfig.to_csv(output_path+'\\'+file)
+# =========================
+        cols_ols = {'Coeff': 'Coeff_OLS',
+                    'pvalue': 'pvalue_OLS'}
+        cols_fmb = {'Coeff': 'Coeff_FMB',
+                    'pvalue': 'pvalue_FMB'}
+        ols_res_adj = ols_result.rename(columns=cols_ols)
+        fmb_res_adj = fmb_result.rename(columns=cols_fmb)
+        reg_result = ols_res_adj.join(fmb_res_adj)    
+        
+        cols_ols = {'Value': 'Value_OLS'}
+        cols_fmb = {'Value': 'Value_FMB'}
+        ols_keyfig_adj = ols_keyfig.rename(columns=cols_ols)
+        fmb_keyfig_adj = fmb_keyfig.rename(columns=cols_fmb)
+        keyfig_result = ols_keyfig_adj.join(fmb_keyfig_adj) 
+# =========================    
+        file_ols = ols_aggresult_file
         file_ols = f'{start_year}_{end_year}_{file_ols}'
-        file_ols_key = ols_agg_key_file
-        file_ols_key = f'{start_year}_{end_year}_{file_ols_key}'
-        file_fmb = fmb_agg_result_file
+        file_ols_keyfig = ols_aggkeyfig_file
+        file_ols_keyfig = f'{start_year}_{end_year}_{file_ols_keyfig}'
+        file_fmb = fmb_aggresult_file
         file_fmb = f'{start_year}_{end_year}_{file_fmb}'
-        file_fmb_key = fmb_agg_key_file
-        file_fmb_key = f'{start_year}_{end_year}_{file_fmb_key}'
-        
+        file_fmb_keyfig = fmb_aggkeyfig_file
+        file_fmb_keyfig = f'{start_year}_{end_year}_{file_fmb_keyfig}'
+# =========================        
         if adj_reg_cols == False:
-            ols_agg = ols_result
-            ols_key_agg = ols_key_figs
-            ols_agg.to_csv(output_path+'\\'+file_ols)
-            ols_key_agg.to_csv(output_path+'\\'+file_ols_key)
-            fmb_agg = fmb_result
-            fmb_key_agg = fmb_key_figs
-            fmb_agg.to_csv(output_path+'\\'+file_fmb)
-            fmb_key_agg.to_csv(output_path+'\\'+file_fmb_key)
+            ols_aggres = ols_result
+            ols_aggkey = ols_keyfig
+            ols_aggres.to_csv(output_path+'\\'+file_ols)
+            ols_aggkey.to_csv(output_path+'\\'+file_ols_keyfig)
+            fmb_aggres = fmb_result
+            fmb_aggkey = fmb_keyfig
+            fmb_aggres.to_csv(output_path+'\\'+file_fmb)
+            fmb_aggkey.to_csv(output_path+'\\'+file_fmb_keyfig)
         else:
-            ols_agg = pd.read_csv(output_path+'\\'+file_ols,index_col=index_col)
-            ols_key_agg = pd.read_csv(output_path+'\\'+file_ols_key,index_col=index_col)
-            fmb_agg = pd.read_csv(output_path+'\\'+file_fmb,index_col=index_col)
-            fmb_key_agg = pd.read_csv(output_path+'\\'+file_fmb_key,index_col = index_col)
+            ols_aggres = pd.read_csv(output_path+'\\'+file_ols,
+                                     index_col = index_col)
+            ols_aggkey = pd.read_csv(output_path+'\\'+file_ols_keyfig,
+                                     index_col = index_col)
+            fmb_aggres = pd.read_csv(output_path+'\\'+file_fmb,
+                                     index_col = index_col)
+            fmb_aggkey = pd.read_csv(output_path+'\\'+file_fmb_keyfig,
+                                     index_col = index_col)
 
-            ols_agg = pd.concat([ols_agg, ols_result], axis=1) 
-            ols_key_agg = pd.concat([ols_key_agg, ols_key_figs], axis=1) 
-            ols_agg.to_csv(output_path+'\\'+file_ols)
-            ols_key_agg.to_csv(output_path+'\\'+file_ols_key)
-# ========================= 
-            fmb_agg = pd.concat([fmb_agg, fmb_result], axis=1)
-            fmb_key_agg = pd.concat([fmb_key_agg, fmb_key_figs], axis=1)
-            fmb_agg.to_csv(output_path+'\\'+file_fmb)
-            fmb_key_agg.to_csv(output_path+'\\'+file_fmb_key)
-            
+            ols_aggres = pd.concat([ols_aggres, ols_result], axis=1) 
+            ols_aggkey = pd.concat([ols_aggkey, ols_keyfig], axis=1) 
+            ols_aggres.to_csv(output_path+'\\'+file_ols)
+            ols_aggkey.to_csv(output_path+'\\'+file_ols_keyfig)
 
-            print('Test')
-
+            fmb_aggres = pd.concat([fmb_aggres, fmb_result], axis=1)
+            fmb_aggkey = pd.concat([fmb_aggkey, fmb_keyfig], axis=1)
+            fmb_aggres.to_csv(output_path+'\\'+file_fmb)
+            fmb_aggkey.to_csv(output_path+'\\'+file_fmb_keyfig)
         
-        
-    
-        
-        
-
-            
-            
+        self.ols_result_agg = ols_aggres
+        self.ols_keyfig_agg = ols_aggkey
+        self.fmb_result_agg = fmb_aggres
+        self.fmb_keyfig_agg = fmb_aggkey
+        self.regression_result = reg_result
+        self.regression_keyfig = keyfig_result
         
