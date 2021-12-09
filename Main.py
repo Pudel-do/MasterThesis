@@ -32,17 +32,26 @@ port_days = 15
 scale_factor = 100
 
 from Regression import *
+clean_file = False
 adj_reg_cols = True
 reg_cols = [
     'InitialReturn', 
     'UnderwriterRank', 'TotalAssets',
-    #'TechDummy', 'AMEX', 'NASDQ', 'NYSE',
+    'TechDummy', 'AMEX', 'NASDQ', 'NYSE',
     'MarketReturn', 
     'MarketReturnSlopeDummy',
     'SectorReturn', 
     'SectorReturnSlopeDummy',
-    'PriceRevision', 'PriceRevisionSlopeDummy',
-    'ProceedsRevision'
+    'PriceRevision', 
+    # 'PriceRevisionSlopeDummy',
+    'PriceRevisionMax', 
+    'PriceRevisionMin',
+    # 'SharesRevision', 
+    # 'SharesRevisionSlopeDummy',
+    'ProceedsRevision', 
+    # 'ProceedsRevisionSlopeDummy',
+    'ProceedsRevisionMax', 
+    'ProceedsRevisionMin',
     ]
 # ===========================================
 # Prediction Model - Parameter and Settings
@@ -71,8 +80,6 @@ if adj_feat_eng == True:
     obj_file = feat_eng_obj_file
     obj_file = f'{start_year}_{end_year}_{obj_file}'
     save_obj(feat_eng_obj, output_path, obj_file)
-    full_data = feat_eng_obj.full_data
-    model_data = feat_eng_obj.model_data
 else:
     obj_file = feat_eng_obj_file
     obj_file = f'{start_year}_{end_year}_{obj_file}'
@@ -80,13 +87,15 @@ else:
     full_data = feat_eng_obj.full_data
     model_data = feat_eng_obj.model_data
     
-reg_obj = Regression(model_data, start_year, end_year)
+reg_obj = Regression(feat_eng_obj, start_year, end_year)
 reg_obj.preprocessing(reg_cols)
 reg_obj.ols_regression()
 reg_obj.fmb_regression(start_date, end_date)
-reg_obj.build_results(adj_reg_cols)
+reg_obj.build_results(adj_reg_cols, clean_file)
 obj_file = reg_obj_file
 obj_file = f'{start_year}_{end_year}_{obj_file}'
 save_obj(reg_obj, output_path, obj_file)
+
+desc_stat = descriptive_statistic(reg_obj)
 
     
