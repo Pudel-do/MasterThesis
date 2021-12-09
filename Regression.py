@@ -132,38 +132,26 @@ class Regression:
         index_col = 'Unnamed: 0'
         
         ols_result = self.ols_result
-        file = ols_result_file
-        file = f'{start_year}_{end_year}_{file}'
-        # ols_result.to_csv(output_path+'\\'+file)
-        
         ols_keyfig = self.ols_keyfig
-        file = ols_keyfig_file
-        file = f'{start_year}_{end_year}_{file}'
-        # ols_keyfig.to_csv(output_path+'\\'+file)
-# =========================        
         fmb_result = self.fmb_result
-        file = fmb_result_file
-        file = f'{start_year}_{end_year}_{file}'
-        # fmb_result.to_csv(output_path+'\\'+file)
-        
         fmb_keyfig = self.fmb_keyfig
-        file = fmb_keyfig_file
-        file = f'{start_year}_{end_year}_{file}'
-        # fmb_keyfig.to_csv(output_path+'\\'+file)
-# =========================
+
         cols_ols = {'Coeff': 'Coeff_OLS',
                     'pvalue': 'pvalue_OLS'}
         cols_fmb = {'Coeff': 'Coeff_FMB',
                     'pvalue': 'pvalue_FMB'}
         ols_res_adj = ols_result.rename(columns=cols_ols)
         fmb_res_adj = fmb_result.rename(columns=cols_fmb)
-        reg_result = ols_res_adj.join(fmb_res_adj)    
+        reg_result = ols_res_adj.join(fmb_res_adj)   
         
         cols_ols = {'Value': 'Value_OLS'}
         cols_fmb = {'Value': 'Value_FMB'}
         ols_keyfig_adj = ols_keyfig.rename(columns=cols_ols)
         fmb_keyfig_adj = fmb_keyfig.rename(columns=cols_fmb)
         keyfig_result = ols_keyfig_adj.join(fmb_keyfig_adj) 
+        
+        self.reg_result = reg_result
+        self.keyfig_result = keyfig_result
 # =========================    
         file_ols = ols_aggresult_file
         file_ols = f'{start_year}_{end_year}_{file_ols}'
@@ -174,11 +162,6 @@ class Regression:
         file_fmb_keyfig = fmb_aggkeyfig_file
         file_fmb_keyfig = f'{start_year}_{end_year}_{file_fmb_keyfig}'
         
-        # df = pd.DataFrame(columns = [index_col])
-        # df.to_csv(output_path+'\\'+file_ols_keyfig)
-        # df.to_csv(output_path+'\\'+file_fmb)
-        # df.to_csv(output_path+'\\'+file_fmb_keyfig)
-# =========================       
         if adj_reg_cols == True:
             ols_aggres = pd.read_csv(output_path+'\\'+file_ols, index_col=index_col)
             ols_aggres = pd.concat([ols_aggres, ols_result], axis=1)
