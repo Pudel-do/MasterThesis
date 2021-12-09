@@ -9,6 +9,7 @@ import pandas as pd
 import numpy as np
 import statsmodels.api as sm
 import statsmodels.stats.weightstats as smw
+import sys
 from GetData import *
 
 class Regression:
@@ -125,7 +126,7 @@ class Regression:
         self.fmb_result = avg_result
         self.fmb_keyfig = avg_keyfig
         
-    def build_results(self, adj_reg_cols):
+    def build_results(self, adj_reg_cols, clean_file):
         start_year = self.start_year
         end_year = self.end_year
         index_col = 'Unnamed: 0'
@@ -133,22 +134,22 @@ class Regression:
         ols_result = self.ols_result
         file = ols_result_file
         file = f'{start_year}_{end_year}_{file}'
-        ols_result.to_csv(output_path+'\\'+file)
+        # ols_result.to_csv(output_path+'\\'+file)
         
         ols_keyfig = self.ols_keyfig
         file = ols_keyfig_file
         file = f'{start_year}_{end_year}_{file}'
-        ols_keyfig.to_csv(output_path+'\\'+file)
+        # ols_keyfig.to_csv(output_path+'\\'+file)
 # =========================        
         fmb_result = self.fmb_result
         file = fmb_result_file
         file = f'{start_year}_{end_year}_{file}'
-        fmb_result.to_csv(output_path+'\\'+file)
+        # fmb_result.to_csv(output_path+'\\'+file)
         
         fmb_keyfig = self.fmb_keyfig
         file = fmb_keyfig_file
         file = f'{start_year}_{end_year}_{file}'
-        fmb_keyfig.to_csv(output_path+'\\'+file)
+        # fmb_keyfig.to_csv(output_path+'\\'+file)
 # =========================
         cols_ols = {'Coeff': 'Coeff_OLS',
                     'pvalue': 'pvalue_OLS'}
@@ -172,40 +173,55 @@ class Regression:
         file_fmb = f'{start_year}_{end_year}_{file_fmb}'
         file_fmb_keyfig = fmb_aggkeyfig_file
         file_fmb_keyfig = f'{start_year}_{end_year}_{file_fmb_keyfig}'
-# =========================        
-        if adj_reg_cols == False:
-            ols_aggres = ols_result
-            ols_aggkey = ols_keyfig
-            ols_aggres.to_csv(output_path+'\\'+file_ols)
-            ols_aggkey.to_csv(output_path+'\\'+file_ols_keyfig)
-            fmb_aggres = fmb_result
-            fmb_aggkey = fmb_keyfig
-            fmb_aggres.to_csv(output_path+'\\'+file_fmb)
-            fmb_aggkey.to_csv(output_path+'\\'+file_fmb_keyfig)
-        else:
-            ols_aggres = pd.read_csv(output_path+'\\'+file_ols,
-                                     index_col = index_col)
-            ols_aggkey = pd.read_csv(output_path+'\\'+file_ols_keyfig,
-                                     index_col = index_col)
-            fmb_aggres = pd.read_csv(output_path+'\\'+file_fmb,
-                                     index_col = index_col)
-            fmb_aggkey = pd.read_csv(output_path+'\\'+file_fmb_keyfig,
-                                     index_col = index_col)
-
-            ols_aggres = pd.concat([ols_aggres, ols_result], axis=1) 
-            ols_aggkey = pd.concat([ols_aggkey, ols_keyfig], axis=1) 
-            ols_aggres.to_csv(output_path+'\\'+file_ols)
-            ols_aggkey.to_csv(output_path+'\\'+file_ols_keyfig)
-
-            fmb_aggres = pd.concat([fmb_aggres, fmb_result], axis=1)
-            fmb_aggkey = pd.concat([fmb_aggkey, fmb_keyfig], axis=1)
-            fmb_aggres.to_csv(output_path+'\\'+file_fmb)
-            fmb_aggkey.to_csv(output_path+'\\'+file_fmb_keyfig)
         
-        self.ols_result_agg = ols_aggres
-        self.ols_keyfig_agg = ols_aggkey
-        self.fmb_result_agg = fmb_aggres
-        self.fmb_keyfig_agg = fmb_aggkey
-        self.regression_result = reg_result
-        self.regression_keyfig = keyfig_result
+        # df = pd.DataFrame(columns = [index_col])
+        # df.to_csv(output_path+'\\'+file_ols_keyfig)
+        # df.to_csv(output_path+'\\'+file_fmb)
+        # df.to_csv(output_path+'\\'+file_fmb_keyfig)
+# =========================       
+        if adj_reg_cols == True:
+            ols_aggres = pd.read_csv(output_path+'\\'+file_ols, index_col=index_col)
+            ols_aggres = pd.concat([ols_aggres, ols_result], axis=1)
+            ols_aggres.to_csv(output_path+'\\'+file_ols)
+            
+            ols_aggkey = pd.read_csv(output_path+'\\'+file_ols_keyfig, index_col=index_col)
+            ols_aggkey = pd.concat([ols_aggkey, ols_keyfig], axis=1)
+            ols_aggkey.to_csv(output_path+'\\'+file_ols_keyfig)
+            
+            fmb_aggres = pd.read_csv(output_path+'\\'+file_fmb, index_col=index_col)
+            fmb_aggres = pd.concat([fmb_aggres, fmb_result], axis=1)
+            fmb_aggres.to_csv(output_path+'\\'+file_fmb)
+            
+            fmb_aggkey = pd.read_csv(output_path+'\\'+file_fmb_keyfig, index_col=index_col)
+            fmb_aggkey = pd.concat([fmb_aggkey, fmb_keyfig], axis=1)
+            fmb_aggkey.to_csv(output_path+'\\'+file_fmb_keyfig)
+            
+            sys.exit(exit_message2)
+        else:
+            ols_aggres = pd.read_csv(output_path+'\\'+file_ols, index_col=index_col)
+            ols_aggres = ols_aggres.iloc[: , 1:]
+            ols_aggkey = pd.read_csv(output_path+'\\'+file_ols_keyfig, index_col=index_col)
+            ols_aggkey = ols_aggkey.iloc[: , 1:]
+            
+            fmb_aggres = pd.read_csv(output_path+'\\'+file_fmb, index_col=index_col)
+            fmb_aggres = fmb_aggres.iloc[: , 1:]
+            fmb_aggkey = pd.read_csv(output_path+'\\'+file_fmb_keyfig, index_col=index_col)
+            fmb_aggkey = fmb_aggkey.iloc[: , 1:]
+            
+            self.ols_result_agg = ols_aggres
+            self.ols_keyfig_agg = ols_aggkey
+            self.fmb_result_agg = fmb_aggres
+            self.fmb_keyfig_agg = fmb_aggkey
+            if clean_file == True:
+                ols_aggres = pd.DataFrame(columns = [index_col])
+                ols_aggres.to_csv(output_path+'\\'+file_ols)
+                ols_aggkey = pd.DataFrame(columns = [index_col])
+                ols_aggkey.to_csv(output_path+'\\'+file_ols_keyfig)
+                fmb_aggres = pd.DataFrame(columns = [index_col])
+                fmb_aggres.to_csv(output_path+'\\'+file_fmb)
+                fmb_aggkey = pd.DataFrame(columns = [index_col])
+                fmb_aggkey.to_csv(output_path+'\\'+file_fmb_keyfig)
+            
+            
+
         
