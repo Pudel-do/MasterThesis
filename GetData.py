@@ -9,6 +9,7 @@ import pandas as pd
 import numpy as np
 
 exit_message = 'Download of CRSP data for quotes and returns necessary due to time period adjustments'
+exit_message2 = 'Adjustment mode for explanatory variables is active. Select variables to consider. Otherwise set adjustment parameter to False for result generation.'
 
 output_path = r'C:\Users\Matthias Pudel\OneDrive\Studium\Master\Master Thesis\Empirical Evidence\Code\Output Data'
 prep_obj_file = 'DataPreparation.pkl'
@@ -17,13 +18,13 @@ reg_obj_file = 'Regression.pkl'
 uw_matching_file = 'UnderwriterMatchResults.csv'
 public_feat_file = 'PublicFeatures.csv'
 ols_result_file = 'RegressionResult_OLS.csv'
-ols_key_fig_file = 'KeyFigures_OLS.csv'
-ols_agg_result_file = 'AggregatedRegressionResult_OLS.csv'
-ols_agg_key_file = 'AggregatedKeyFigures_OLS.csv'
+ols_keyfig_file = 'KeyFigures_OLS.csv'
+ols_aggresult_file = 'AggregatedRegressionResult_OLS.csv'
+ols_aggkeyfig_file = 'AggregatedKeyFigures_OLS.csv'
 fmb_result_file = 'RegressionResult_FMB.csv'
-fmb_key_fig_file = 'KeyFigures_OLS.csv'
-fmb_agg_result_file = 'AggregatedRegressionResult_FMB.csv'
-fmb_agg_key_file = 'AggregatedKeyFigures_FMB.csv'
+fmb_keyfig_file = 'KeyFigures_OLS.csv'
+fmb_aggresult_file = 'AggregatedRegressionResult_FMB.csv'
+fmb_aggkeyfig_file = 'AggregatedKeyFigures_FMB.csv'
 
 
 input_path = r'C:\Users\Matthias Pudel\OneDrive\Studium\Master\Master Thesis\Empirical Evidence\Code\Input Data'
