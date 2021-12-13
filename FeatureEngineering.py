@@ -11,14 +11,17 @@ from pandas.tseries.offsets import DateOffset
 from GetData import *
 
 model_cols = ['InitialReturn', 'UnderwriterRank', 'TotalAssets',
-              'TechDummy', 'AMEX', 'NASDQ', 'NYSE',
-              'MarketReturn', 'SectorReturn',
+              'TechSector', 'AMEX', 'NASDQ', 'NYSE',
+              'MarketReturn', 'MarketReturnSlopeDummy',
+              'SectorReturn', 'SectorReturnSlopeDummy',
               'PriceRevision', 'PriceRevisionSlopeDummy',
-              'PriceRevisionMax', 'PriceRevisionMin',
+              'PriceRevisionMaxDummy', 'PriceRevisionMinDummy',
+              'PriceRevisionMaxSlopeDummy', 'PriceRevisionMinSlopeDummy',
               'SharesRevision', 'SharesRevisionSlopeDummy',
               'ProceedsRevision', 'ProceedsRevisionSlopeDummy',
-              'ProceedsRevisionMax', 'ProceedsRevisionMin',
-              'RegistrationDays']
+              'ProceedsRevisionMaxDummy', 'ProceedsRevisionMinDummy',
+              'ProceedsRevisionMaxSlopeDummy', 'ProceedsRevisionMinSlopeDummy',
+              'RegistrationDays', 'IssueDate']
 
 class FeatureEngineering:
     def __init__(self, prep_obj, scale_factor):
@@ -78,8 +81,8 @@ class FeatureEngineering:
                               tech_id)
         nan_ident = pd.isnull(self.full_data['Sector']) == True
         tech_nan_idx = self.full_data.loc[nan_ident].index
-        self.full_data['TechDummy'] = tech_dummy
-        self.full_data.loc[tech_nan_idx, 'TechDummy'] = np.nan
+        self.full_data['TechSector'] = tech_dummy
+        self.full_data.loc[tech_nan_idx, 'TechSector'] = np.nan
 # =========================
         disc_fact = self.full_data['CPI_DiscountFactor']
         total_assets = self.full_data['TotalAssets']
@@ -203,6 +206,16 @@ class FeatureEngineering:
                         public_features.loc[index, col_name] = np.nan
                 else:
                     public_features.loc[index, col_name] = np.nan
+                    
+            market_ret = public_features['MarketReturn']
+            market_ret_slope = get_slope_dummy(market_ret)
+            col_name = 'MarketReturnSlopeDummy'
+            public_features[col_name] = market_ret_slope
+            
+            sector_ret = public_features['SectorReturn']
+            sector_ret_slope = get_slope_dummy(sector_ret)
+            col_name = 'SectorReturnSlopeDummy'
+            public_features[col_name] = sector_ret_slope
             
             start_year = self.prep_obj.start_year
             end_year = self.prep_obj.end_year
@@ -230,19 +243,27 @@ class FeatureEngineering:
         prc_rev = prc_rev * self.scale
         self.full_data['PriceRevision'] = prc_rev
         
-        prc_rev_slope = get_slope_dummy(prc_rev)
+        prc_rev_slp = get_SlopeDummy(prc_rev)
         col_name = 'PriceRevisionSlopeDummy'
-        self.full_data[col_name] = prc_rev_slope
+        self.full_data[col_name] = prc_rev_slp
         
         max_prc_rg = self.full_data['MaxPriceRange']
-        prc_rev_max = get_dummy_max(offer_prc, max_prc_rg)
-        col_name = 'PriceRevisionMax'
+        prc_rev_max = get_DummyMax(offer_prc, max_prc_rg)
+        col_name = 'PriceRevisionMaxDummy'
         self.full_data[col_name] = prc_rev_max
         
+        prc_rev_maxslp = get_SlopeDummyBounds(prc_rev_max, prc_rev)
+        col_name = ['PriceRevisionMaxSlopeDummy']
+        self.full_data[col_name] = prc_rev_maxslp
+        
         min_prc_rg = self.full_data['MinPriceRange']
-        prc_rev_min = get_dummy_min(offer_prc, min_prc_rg)
-        col_name = 'PriceRevisionMin'
+        prc_rev_min = get_DummyMin(offer_prc, min_prc_rg)
+        col_name = 'PriceRevisionMinDummy'
         self.full_data[col_name] = prc_rev_min
+        
+        prc_rev_minslp = get_SlopeDummyBounds(prc_rev_min, prc_rev)
+        col_name = ['PriceRevisionMinSlopeDummy']
+        self.full_data[col_name] = prc_rev_minslp
 # =========================
         shares_off = self.full_data['SharesOffered']
         shares_fil = self.full_data['SharesFiled']
@@ -250,9 +271,9 @@ class FeatureEngineering:
         shares_rev = shares_rev * self.scale
         self.full_data['SharesRevision'] = shares_rev
         
-        shares_rev_slope = get_slope_dummy(shares_rev)
+        shares_rev_slp = get_SlopeDummy(shares_rev)
         col_name = 'SharesRevisionSlopeDummy'
-        self.full_data[col_name] = shares_rev_slope        
+        self.full_data[col_name] = shares_rev_slp        
 # =========================
         act_pro = self.full_data['ActualProceeds']
         exp_pro = self.full_data['ExpectedProceeds']
@@ -260,19 +281,27 @@ class FeatureEngineering:
         pro_rev = pro_rev * self.scale
         self.full_data['ProceedsRevision'] = pro_rev
         
-        pro_rev_slope = get_slope_dummy(pro_rev)
+        pro_rev_slp = get_SlopeDummy(pro_rev)
         col_name = 'ProceedsRevisionSlopeDummy'
-        self.full_data[col_name] = pro_rev_slope
+        self.full_data[col_name] = pro_rev_slp
         
         exp_pro_max = self.full_data['ExpectedProceedsMax']
-        pro_rev_max = get_dummy_max(act_pro, exp_pro_max)
-        col_name = ['ProceedsRevisionMax']
+        pro_rev_max = get_DummyMax(act_pro, exp_pro_max)
+        col_name = ['ProceedsRevisionMaxDummy']
         self.full_data[col_name] = pro_rev_max
         
+        pro_rev_maxslp = get_SlopeDummyBounds(pro_rev_max, pro_rev)
+        col_name = ['ProceedsRevisionMaxSlopeDummy']
+        self.full_data[col_name] = pro_rev_maxslp
+        
         exp_pro_min = self.full_data['ExpectedProceedsMin']
-        pro_rev_min = get_dummy_min(act_pro, exp_pro_min)
-        col_name = ['ProceedsRevisionMin']
+        pro_rev_min = get_DummyMin(act_pro, exp_pro_min)
+        col_name = ['ProceedsRevisionMinDummy']
         self.full_data[col_name] = pro_rev_min
+        
+        pro_rev_minslp = get_SlopeDummyBounds(pro_rev_min, pro_rev)
+        col_name = ['ProceedsRevisionMinSlopeDummy']
+        self.full_data[col_name] = pro_rev_minslp
 # =========================        
         self.model_data = self.full_data[model_cols]
         
