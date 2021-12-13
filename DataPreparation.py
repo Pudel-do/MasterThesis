@@ -29,12 +29,14 @@ class DataPreparation:
         sdc = sdc_raw.drop_duplicates(subset = dup_ident)
         ext_port_dt = self.start_date - DateOffset(years=1)
         
-        rough_filter = (sdc['IssueDate'] >= ext_port_dt) &\
-                       (sdc['IssueDate'] <= self.end_date) &\
-                       (sdc['FilingDate'] <= self.end_date) &\
-                       (pd.isnull(sdc['IssueDate']) == False) &\
-                       (pd.isnull(sdc['FilingDate']) == False) &\
-                       (pd.isnull(sdc['CUSIP9']) == False)       
+        rough_filter = (
+            (sdc['IssueDate'] >= ext_port_dt) &\
+            (sdc['IssueDate'] <= self.end_date) &\
+            (sdc['FilingDate'] <= self.end_date) &\
+            (pd.isnull(sdc['IssueDate']) == False) &\
+            (pd.isnull(sdc['FilingDate']) == False) &\
+            (pd.isnull(sdc['CUSIP9']) == False)
+            )   
         sdc = sdc.loc[rough_filter]
 
         start_year = ext_port_dt.strftime('%Y')
@@ -49,13 +51,15 @@ class DataPreparation:
             
             sys.exit(exit_message)
 # =========================
-        ext_filter = (sdc['IPO'] == 'Yes') &\
-                     (sdc['ADR'] == 'No') &\
-                     (sdc['CEF'] == 'No') &\
-                     (sdc['Units'] == 'No') &\
-                     (pd.isnull(sdc['REIT']) == True) &\
-                     (sdc['OfferPrice'] >= 5)
-                     
+        ext_filter = (
+            (sdc['IPO'] == 'Yes') &\
+            (sdc['Units'] == 'No') &\
+            (sdc['ADR'] == 'No') &\
+            (sdc['CEF'] == 'No') &\
+            (pd.isnull(sdc['REIT']) == True) &\
+            (sdc['OfferPrice'] >= 5)
+            )
+                              
         port_data = sdc.loc[ext_filter]
         base_filter = port_data['IssueDate']>=self.start_date
         base = port_data.loc[base_filter]
