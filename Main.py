@@ -7,61 +7,75 @@ Created on Sat Nov 20 14:37:04 2021
 
 import pandas as pd
 import warnings
+from DataPreparation import DataPreparation
+from FeatureEngineering import FeatureEngineering
+from Regression import Regression
 from GetData import *
+from Visualization import *
 warnings.filterwarnings("ignore")
-
-# ===========================================
-# Prediction Model - Parameter and Settings
-# ===========================================
 
 # ===========================================
 # Empirical Evidence - Parameter and Settings
 # ===========================================
+
+# =========================
+# General Settings
+# =========================
 start_date = pd.Timestamp('2000-01-01')
 end_date = pd.Timestamp('2019-12-31')
 start_year = start_date.strftime('%Y')
 end_year = end_date.strftime('%Y')
-
-from DataPreparation import *
-adj_preprocess = False
+# =========================
+# Data Preparation
+# =========================
+adj_data_prep = False
 adj_uw_matching = False
 adj_time_range = False
 adj_close_price = False
 # =========================
-from FeatureEngineering import *
-adj_feat_eng = False
+# Feature Engineering
+# =========================
+adj_feat_eng = True  
 adj_public_feat = False
+adj_outliers = True
+plot_outliers = True
+adj_words_rev = True
 index_weight = 'Equal'
 port_days = 15
 scale_factor = 100
+whisker_factor = 1.5
 # =========================
-from Regression import *
+# Visualization
+# =========================
+equal_std = True
+# =========================
+# Regression
+# =========================
 clean_file = False
-adj_reg_cols = False
+adj_reg_cols = False 
 reg_vars = [
     'InitialReturn', 
     'UnderwriterRank', 'TotalAssets',
     'TechSector', 'AMEX', 'NASDQ', 'NYSE',
-    'MarketReturn', 
-    'MarketReturnSlopeDummy',
-    'SectorReturn', 
-    'SectorReturnSlopeDummy',
-    # 'PriceRevision', 
+    'MarketReturn', 'MarketReturnSlopeDummy',
+    'SectorReturn', 'SectorReturnSlopeDummy',
+    'PriceRevision', 
     # 'PriceRevisionSlopeDummy',
-    # 'PriceRevisionMax', 
-    # 'PriceRevisionMin',
-    # 'SharesRevision', 
+    # 'PriceRevisionMaxDummy',
+    # 'PriceRevisionMaxSlopeDummy', 
+    'PriceRevisionMinDummy',
+    'PriceRevisionMinSlopeDummy',
+    'SharesRevision', 
     # 'SharesRevisionSlopeDummy',
-    # 'ProceedsRevision', 
+    'ProceedsRevision', 
     # 'ProceedsRevisionSlopeDummy',
-    # 'ProceedsRevisionMax', 
-    # 'ProceedsRevisionMin',
+    # 'ProceedsRevisionMaxDummy',
+    # 'ProceedsRevisionMaxSlopeDummy', 
+    'ProceedsRevisionMinDummy',
+    'ProceedsRevisionMinSlopeDummy'
     ]
-# =========================
-from Visualization import *
-equal_std = True
 # ===========================================
-if adj_preprocess == True:
+if adj_data_prep == True:
     prep_obj = DataPreparation(start_date, end_date)
     prep_obj.rough_preprocessing(adj_time_range)
     prep_obj.build_aux_vars()
@@ -81,6 +95,8 @@ if adj_feat_eng == True:
     feat_eng_obj.firm_features()
     feat_eng_obj.public_features(index_weight, port_days, adj_public_feat)
     feat_eng_obj.private_features()
+    if adj_outliers == True:
+        feat_eng_obj.outlier_adjustment(plot_outliers, whisker_factor)
     obj_file = feat_eng_obj_file
     obj_file = f'{start_year}_{end_year}_{obj_file}'
     save_obj(feat_eng_obj, output_path, obj_file)
@@ -88,8 +104,6 @@ else:
     obj_file = feat_eng_obj_file
     obj_file = f'{start_year}_{end_year}_{obj_file}'
     feat_eng_obj = get_object(output_path, obj_file)
-    full_data = feat_eng_obj.full_data
-    model_data = feat_eng_obj.model_data
     
 reg_obj = Regression(feat_eng_obj, start_year, end_year)
 reg_obj.preprocessing(reg_vars)
@@ -99,7 +113,10 @@ reg_obj.build_results(adj_reg_cols, clean_file)
 obj_file = reg_obj_file
 obj_file = f'{start_year}_{end_year}_{obj_file}'
 save_obj(reg_obj, output_path, obj_file)
-
+     
 desc_stat = descriptive_statistic(reg_obj, equal_std)
+plot_regression_results(reg_obj)
+
+
 
     
