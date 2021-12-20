@@ -102,7 +102,10 @@ class DataPreparation:
         self.base = pd.concat([self.base, 
                               exchange_dummies[exchange_cols]], 
                              axis = 1)
-# =========================        
+# =========================
+# Use Price Range and Share Data from Gerrit refering to the mid price range
+# and shares filed to fill missing values for columns OriginalMiddleOfFilingPriceRange
+# and SharesFiledSumOfAllMkts
         mean_prc_rg = np.where(pd.isnull(self.base['OriginalMiddleOfFilingPriceRange']) == True,
                                          self.base['AmendedMiddleOfFilingPrice'],
                                          self.base['OriginalMiddleOfFilingPriceRange'])
@@ -201,9 +204,46 @@ class DataPreparation:
                              how = 'left',
                              on = 'DealNumber')
         
+        self.full_data = self.base.copy()
+        
     def data_merging(self, adj_close_price):
+        edgar_cols = ['DealNumber', 
+                      'FirstProspectPath', 'First_PR_Fil_file_path',
+                      'LastProspectPath', 'Last_PR_Fil_file_path']
+        edgar_data = pd.read_csv(input_path+'\\'+edgar_file, usecols = edgar_cols)
+        self.full_data = pd.merge(self.full_data,
+                                  edgar_data,
+                                  how = 'left',
+                                  on = 'DealNumber')
+        
+        last_prosp_path = r'D:\OneDrive_Backup\Master\MasterThesis\ProspectusData\Final_Prospects'
+        first_prosp_path = r'D:\OneDrive_Backup\Master\MasterThesis\ProspectusData\Initial_Prospects'
+        for index, row in self.full_data.iterrows():
+            if pd.isnull(row['FirstProspectPath']) == False:
+                first_prosp_file = row['FirstProspectPath']
+                try:
+                    path = first_prosp_path+'\\'+first_prosp_file
+                    file = open(os.path.join(path, first_prosp_file),'r')
+                    self.full_data.loc[index, 'FirstProspectIndicator'] = 'Present'
+                except:
+                    self.full_data.loc[index, 'FirstProspectIndicator'] = np.nan
+            else:
+                self.full_data.loc[index, 'FirstProspectIndicator'] = np.nan
+
+            if pd.isnull(row['LastProspectPath']) == False:
+                last_prosp_file = row['LastProspectPath']
+                try:
+                    path = last_prosp_path+'\\'+last_prosp_file
+                    file = open(os.path.join(path, last_prosp_file),'r')
+                    self.full_data.loc[index, 'LastProspectIndicator'] = 'Present'
+                except:
+                    self.full_data.loc[index, 'LastProspectIndicator'] = np.nan
+            else:
+                self.full_data.loc[index, 'LastProspectIndicator'] = np.nan
+                
+# =========================         
         total_assets = pd.read_csv(input_path+'\\'+total_assets_file)
-        self.full_data = pd.merge(self.base,
+        self.full_data = pd.merge(self.full_data,
                                   total_assets,
                                   how = 'left',
                                   on = 'DealNumber')
@@ -292,6 +332,8 @@ class DataPreparation:
                                      self.full_data['LastClosePriceWK'],
                                      self.full_data['ClosePrice'])
             self.full_data['ClosePrice'] = close_prc_ext
+           
+            
 
             
 
