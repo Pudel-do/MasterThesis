@@ -7,10 +7,14 @@ Created on Sat Nov 27 22:23:49 2021
 
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 from pandas.tseries.offsets import DateOffset
 from GetData import *
+import re 
+from re import search
 
-model_cols = ['InitialReturn', 'UnderwriterRank', 'TotalAssets',
+model_cols = ['InitialReturn', 
+              'UnderwriterRank', 'TotalAssets',
               'TechSector', 'AMEX', 'NASDQ', 'NYSE',
               'MarketReturn', 'MarketReturnSlopeDummy',
               'SectorReturn', 'SectorReturnSlopeDummy',
@@ -21,7 +25,12 @@ model_cols = ['InitialReturn', 'UnderwriterRank', 'TotalAssets',
               'ProceedsRevision', 'ProceedsRevisionSlopeDummy',
               'ProceedsRevisionMaxDummy', 'ProceedsRevisionMinDummy',
               'ProceedsRevisionMaxSlopeDummy', 'ProceedsRevisionMinSlopeDummy',
-              'RegistrationDays', 'IssueDate']
+              'RegistrationDays', 'IssueDate',
+              ]
+
+'''To DO:
+    - Add a Dummy variable which is set to 1 when
+    the IPO is backed by Venture Capitalists'''
 
 class FeatureEngineering:
     def __init__(self, prep_obj, scale_factor):
@@ -302,8 +311,43 @@ class FeatureEngineering:
         pro_rev_minslp = get_SlopeDummyBounds(pro_rev_min, pro_rev)
         col_name = ['ProceedsRevisionMinSlopeDummy']
         self.full_data[col_name] = pro_rev_minslp
-# =========================        
+# =========================
+    def outlier_adjustment(self, plot_outliers, whisker_factor):
+        drop_chars = ['Dummy', 'SlopeDummy', 'Min', 'Max',
+                      'UnderwriterRank', 'TechSector', 
+                      'AMEX', 'NASDQ', 'NYSE', 'IssueDate'
+                      ]
+        outlier_cols = []
+        for col in model_cols:
+            if not any(char in col for char in drop_chars):
+                outlier_cols.append(col)
+         
+        if plot_outliers == True:
+            for col in outlier_cols:
+                data = self.full_data[col]
+                data = data.dropna()
+                plt.figure(figsize = (10,6))
+                plt.subplot(121)
+                plt.hist(data, bins = 50)
+                plt.xlabel('Value')
+                plt.ylabel('Frequency')
+                plt.title(f'Histogram {col}')
+                plt.subplot(122)
+                plt.boxplot(data, whis = whisker_factor)
+                plt.xlabel('Value')
+                plt.title(f'Boxplot {col}')
+                
+# =========================           
         self.model_data = self.full_data[model_cols]
+            
+            
+            
+            
+            
+        
+        
+        
+
         
         
         
