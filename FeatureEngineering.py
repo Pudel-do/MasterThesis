@@ -12,6 +12,10 @@ from pandas.tseries.offsets import DateOffset
 from GetData import *
 import re 
 from re import search
+from tabulate import tabulate 
+import warnings
+import os
+warnings.filterwarnings("ignore")
 
 model_cols = ['InitialReturn', 
               'UnderwriterRank', 'TotalAssets',
@@ -28,9 +32,6 @@ model_cols = ['InitialReturn',
               'RegistrationDays', 'IssueDate',
               ]
 
-'''To DO:
-    - Add a Dummy variable which is set to 1 when
-    the IPO is backed by Venture Capitalists'''
 
 class FeatureEngineering:
     def __init__(self, prep_obj, scale_factor):
@@ -42,7 +43,6 @@ class FeatureEngineering:
         total_assets = self.full_data['TotalAssetsBeforeTheOfferingMil']
         total_assets = total_assets.str.replace(',', '')
         total_assets = total_assets.astype(float)
-        total_assets = total_assets * 1000000
         self.full_data['TotalAssets'] = total_assets
 # =========================
         cpi_base_year = self.prep_obj.cpi_base_year
@@ -125,8 +125,8 @@ class FeatureEngineering:
         exchange_cols = ['AMEX', 'NASDQ', 'NYSE']
         self.full_data.loc[exchange_nan_idx, exchange_cols] = np.nan
         
-    def public_features(self, index_weight, port_days, adj_public):
-        if adj_public == True:
+    def public_features(self, index_weight, port_days, adj_portfolio_rets):
+        if adj_portfolio_rets == True:
             ipo_rets_data = pd.read_csv(input_path+'\\'+returns_file,
                                         usecols = ['date', 'NCUSIP', 'RETX'],
                                         parse_dates = ['date'],
@@ -245,7 +245,34 @@ class FeatureEngineering:
                                   how = 'left',
                                   on = 'DealNumber')
             
-    def private_features(self):
+    def private_features(self, adj_words_revison):
+        if adj_words_revison == True:
+            init_prosp_path = prospectus_path+'\\'+'Initial_Prospects'
+            final_prosp_path = prospectus_path+'\\'+'Final_Prospects'
+            
+            for index, row in self.full_data.iterrows():
+                if pd.isnull(row['IP_FileName']) == False:
+                    init_file_name = row['IP_FileName']
+                    init_path = init_prosp_path+'\\'+init_file_name
+                    try:
+                        file = open(os.path.join(init_path, init_file_name),'r')
+                        self.full_data.loc[index, 'IP_FileMatch'] = True
+                    except:
+                        self.full_data.loc[index, 'IP_FileMatch'] = np.nan
+                else:
+                    self.full_data.loc[index, 'IP_FileMatch'] = np.nan
+
+                if pd.isnull(row['FP_FileName']) == False:
+                    final_file_name = row['FP_FileName']
+                    final_path = final_prosp_path+'\\'+final_file_name
+                    try:
+                        file = open(os.path.join(final_path, final_file_name),'r')
+                        self.full_data.loc[index, 'FP_FileMatch'] = True
+                    except:
+                        self.full_data.loc[index, 'FP_FileMatch'] = np.nan
+                else:
+                    self.full_data.loc[index, 'FP_FileMatch'] = np.nan
+# =========================
         offer_prc = self.full_data['OfferPrice']
         mid_prc_rg = self.full_data['MeanPriceRange']
         prc_rev = (offer_prc / mid_prc_rg) -1
@@ -312,32 +339,157 @@ class FeatureEngineering:
         col_name = ['ProceedsRevisionMinSlopeDummy']
         self.full_data[col_name] = pro_rev_minslp
 # =========================
-    def outlier_adjustment(self, plot_outliers, whisker_factor):
-        drop_chars = ['Dummy', 'SlopeDummy', 'Min', 'Max',
+    def outlier_adjustment(self, whisker_factor):
+        drop_cols = ['Dummy', 'SlopeDummy', 'Min', 'Max',
                       'UnderwriterRank', 'TechSector', 
                       'AMEX', 'NASDQ', 'NYSE', 'IssueDate'
                       ]
         outlier_cols = []
         for col in model_cols:
-            if not any(char in col for char in drop_chars):
+            if not any(char in col for char in drop_cols):
                 outlier_cols.append(col)
-         
-        if plot_outliers == True:
-            for col in outlier_cols:
-                data = self.full_data[col]
-                data = data.dropna()
-                plt.figure(figsize = (10,6))
-                plt.subplot(121)
-                plt.hist(data, bins = 50)
-                plt.xlabel('Value')
-                plt.ylabel('Frequency')
-                plt.title(f'Histogram {col}')
-                plt.subplot(122)
-                plt.boxplot(data, whis = whisker_factor)
-                plt.xlabel('Value')
-                plt.title(f'Boxplot {col}')
-                
-# =========================           
+        
+        idx = outlier_cols
+        measure_cols = [
+                'Mean', 'Median',
+                'Min', 'Max',
+                'StandDev',
+                'LowWhisker', 'UpWhisker'
+                ]
+        
+        stat_data = self.full_data[outlier_cols]
+        mean = stat_data.mean()
+        median = stat_data.median()
+        minimum = stat_data.min()
+        maximum = stat_data.max()
+        std = stat_data.std()
+        nobs = len(stat_data)
+        measures = [mean, median, minimum, maximum, std]
+        
+        desc_stat = pd.DataFrame(index = idx)
+        desc_stat = desc_stat.join(measures)
+
+        for col in outlier_cols:
+            data = self.full_data[col]
+            data = data.dropna()
+            plt.figure(figsize = (20,10))
+            plt.subplot(121)
+            plt.hist(data, bins = 50)
+            plt.xlabel('Value')
+            plt.ylabel('Frequency')
+            plt.title(f'{col}')
+            plt.grid(True)
+            plt.subplot(122)
+            plt.boxplot(data, whis = whisker_factor)
+            plt.xlabel('Value')
+            plt.title(f'{col}')
+            
+            q1 = np.percentile(data, 25)
+            q3 = np.percentile(data, 75)
+            iqr = q3 - q1
+            whisker_low = q1 - (whisker_factor * iqr)
+            whisker_up = q3 + (whisker_factor * iqr)
+            
+            desc_stat.loc[col, 'LowWhisk'] = whisker_low
+            desc_stat.loc[col, 'UpWhisk'] = whisker_up
+            
+        desc_stat.index = desc_stat.index.rename('Variable')
+        desc_stat.columns = measure_cols
+        plot_desc_stat = tabulate(desc_stat,
+                                  headers = 'keys',
+                                  floatfmt = '.2f',
+                                  tablefmt = 'simple',
+                                  numalign = 'center',
+                                  showindex = True)
+            
+        print(100*'=')
+        print('Descriptive statistic for outlier identification')
+        print(100*'=', '\n')
+        print(plot_desc_stat)
+        print(95*'-')
+        print(f'Number of observations: {nobs}')
+        print(100*'=', '\n\n\n\n')
+# =========================
+# The entries in the array adj_whiskers display the the lower and 
+# upper tresholds to identify outliers. The order must refer to 
+# the same as in the list adj_outlier_cols
+
+        adj_outlier_cols = ['TotalAssets',
+                            'PriceRevision',
+                            'SharesRevision',
+                            'ProceedsRevision',
+                            'RegistrationDays']
+        
+        adj_whiskers = np.array([
+            [-5942.31, 50000],
+            [-230.22, 229.67],
+            [-230.22, 229.67],
+            [-313.33, 317.00],
+            [0, 1338] 
+            ])
+        
+        adj_whisk_cols = ['AdjustedLowWhisker', 'AdjustedUpWhisker']
+        adj_whiskers = pd.DataFrame(adj_whiskers)
+        adj_whiskers.columns = adj_whisk_cols
+        adj_whiskers.index = adj_outlier_cols
+        
+        n_outliers = 0
+        for index, row in adj_whiskers.iterrows():
+            data = self.full_data[index]
+            outlier_filter = (
+                (data <= row[adj_whisk_cols[0]])|\
+                (data >= row[adj_whisk_cols[1]])
+                ) 
+            outliers = data.loc[outlier_filter]
+            outliers = outliers.index
+            n_outliers += len(outliers)
+            self.full_data = self.full_data.drop(outliers)
+            
+        stat_data_adj = self.full_data[adj_outlier_cols]
+        mean_adj = stat_data_adj.mean()
+        median_adj = stat_data_adj.median()
+        minimum_adj = stat_data_adj.min()
+        maximum_adj = stat_data_adj.max()
+        std_adj = stat_data_adj.std()
+        nobs_adj = len(stat_data_adj)
+        measures_adj = [mean_adj, median_adj,
+                        minimum_adj, maximum_adj,
+                        std_adj, adj_whiskers]
+        
+        idx = adj_outlier_cols
+        adj_cols = measure_cols[:-2]
+        adj_cols.append(adj_whisk_cols[0])
+        adj_cols.append(adj_whisk_cols[1])
+        desc_stat_adj = pd.DataFrame(index = idx)
+        desc_stat_adj = desc_stat_adj.join(measures_adj)
+        desc_stat_adj.columns = adj_cols
+        
+        for col in adj_outlier_cols:
+            data = self.full_data[col]
+            plt.figure(figsize = (20,10))
+            plt.hist(data, bins = 50)
+            plt.xlabel('Value')
+            plt.ylabel('Frequency')
+            plt.title(f'{col} adjusted for outliers')
+            plt.grid(True)
+        
+        desc_stat_adj.index = desc_stat_adj.index.rename('Variable')
+        plot_desc_stat_adj = tabulate(desc_stat_adj,
+                                      headers = 'keys',
+                                      floatfmt = '.2f',
+                                      tablefmt = 'simple',
+                                      numalign = 'center',
+                                      showindex = True)
+            
+        print(100*'=')
+        print('Descriptive statistic after outlier adjustments')
+        print(100*'=', '\n')
+        print(plot_desc_stat_adj)
+        print(95*'-')
+        print(f'Number of observations after adjustments: {nobs_adj}')
+        print(f'Number of removed outliers: {n_outliers}')
+        print(100*'=', '\n\n')
+# =========================        
         self.model_data = self.full_data[model_cols]
             
             
