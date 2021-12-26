@@ -10,6 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pandas.tseries.offsets import DateOffset
 from GetData import *
+from Visualization import *
 import re 
 from re import search
 from tabulate import tabulate 
@@ -17,20 +18,33 @@ import warnings
 import os
 warnings.filterwarnings("ignore")
 
-model_cols = ['InitialReturn', 
-              'UnderwriterRank', 'TotalAssets',
-              'TechSector', 'AMEX', 'NASDQ', 'NYSE',
-              'MarketReturn', 'MarketReturnSlopeDummy',
-              'SectorReturn', 'SectorReturnSlopeDummy',
-              'PriceRevision', 'PriceRevisionSlopeDummy',
-              'PriceRevisionMaxDummy', 'PriceRevisionMinDummy',
-              'PriceRevisionMaxSlopeDummy', 'PriceRevisionMinSlopeDummy',
-              'SharesRevision', 'SharesRevisionSlopeDummy',
-              'ProceedsRevision', 'ProceedsRevisionSlopeDummy',
-              'ProceedsRevisionMaxDummy', 'ProceedsRevisionMinDummy',
-              'ProceedsRevisionMaxSlopeDummy', 'ProceedsRevisionMinSlopeDummy',
-              'RegistrationDays', 'IssueDate',
-              ]
+model_cols = [
+    'InitialReturn', 
+    'UnderwriterRank', 
+    'TotalAssets',
+    'TechSector', 
+    'AMEX', 'NASDQ', 'NYSE',
+    'MarketReturn', 
+    'MarketReturnSlopeDummy',
+    'SectorReturn', 
+    'SectorReturnSlopeDummy',
+    'PriceRevision', 
+    'PriceRevisionSlopeDummy',
+    'PriceRevisionMaxDummy', 
+    'PriceRevisionMinDummy',
+    'PriceRevisionMaxSlopeDummy', 
+    'PriceRevisionMinSlopeDummy',
+    'SharesRevision', 
+    'SharesRevisionSlopeDummy',
+    'ProceedsRevision', 
+    'ProceedsRevisionSlopeDummy',
+    'ProceedsRevisionMaxDummy', 
+    'ProceedsRevisionMinDummy',
+    'ProceedsRevisionMaxSlopeDummy', 
+    'ProceedsRevisionMinSlopeDummy',
+    'RegistrationDays', 
+    'IssueDate',
+    ]
 
 
 class FeatureEngineering:
@@ -272,78 +286,83 @@ class FeatureEngineering:
                         self.full_data.loc[index, 'FP_FileMatch'] = np.nan
                 else:
                     self.full_data.loc[index, 'FP_FileMatch'] = np.nan
-# =========================
+# =========================        
         offer_prc = self.full_data['OfferPrice']
         mid_prc_rg = self.full_data['MeanPriceRange']
         prc_rev = (offer_prc / mid_prc_rg) -1
         prc_rev = prc_rev * self.scale
+        max_prc_rg = self.full_data['MaxPriceRange']
+        min_prc_rg = self.full_data['MinPriceRange']
         self.full_data['PriceRevision'] = prc_rev
         
-        prc_rev_slp = get_SlopeDummy(prc_rev)
-        col_name = 'PriceRevisionSlopeDummy'
-        self.full_data[col_name] = prc_rev_slp
-        
-        max_prc_rg = self.full_data['MaxPriceRange']
-        prc_rev_max = get_DummyMax(offer_prc, max_prc_rg)
-        col_name = 'PriceRevisionMaxDummy'
-        self.full_data[col_name] = prc_rev_max
-        
-        prc_rev_maxslp = get_SlopeDummyBounds(prc_rev_max, prc_rev)
-        col_name = ['PriceRevisionMaxSlopeDummy']
-        self.full_data[col_name] = prc_rev_maxslp
-        
-        min_prc_rg = self.full_data['MinPriceRange']
-        prc_rev_min = get_DummyMin(offer_prc, min_prc_rg)
-        col_name = 'PriceRevisionMinDummy'
-        self.full_data[col_name] = prc_rev_min
-        
-        prc_rev_minslp = get_SlopeDummyBounds(prc_rev_min, prc_rev)
-        col_name = ['PriceRevisionMinSlopeDummy']
-        self.full_data[col_name] = prc_rev_minslp
-# =========================
         shares_off = self.full_data['SharesOffered']
         shares_fil = self.full_data['SharesFiled']
         shares_rev = (shares_off / shares_fil) -1
         shares_rev = shares_rev * self.scale
         self.full_data['SharesRevision'] = shares_rev
         
-        shares_rev_slp = get_SlopeDummy(shares_rev)
-        col_name = 'SharesRevisionSlopeDummy'
-        self.full_data[col_name] = shares_rev_slp        
-# =========================
         act_pro = self.full_data['ActualProceeds']
         exp_pro = self.full_data['ExpectedProceeds']
         pro_rev = (act_pro / exp_pro) -1
         pro_rev = pro_rev * self.scale
-        self.full_data['ProceedsRevision'] = pro_rev
-        
-        pro_rev_slp = get_SlopeDummy(pro_rev)
-        col_name = 'ProceedsRevisionSlopeDummy'
-        self.full_data[col_name] = pro_rev_slp
-        
         exp_pro_max = self.full_data['ExpectedProceedsMax']
-        pro_rev_max = get_DummyMax(act_pro, exp_pro_max)
-        col_name = ['ProceedsRevisionMaxDummy']
-        self.full_data[col_name] = pro_rev_max
-        
-        pro_rev_maxslp = get_SlopeDummyBounds(pro_rev_max, pro_rev)
-        col_name = ['ProceedsRevisionMaxSlopeDummy']
-        self.full_data[col_name] = pro_rev_maxslp
-        
         exp_pro_min = self.full_data['ExpectedProceedsMin']
-        pro_rev_min = get_DummyMin(act_pro, exp_pro_min)
-        col_name = ['ProceedsRevisionMinDummy']
-        self.full_data[col_name] = pro_rev_min
-        
-        pro_rev_minslp = get_SlopeDummyBounds(pro_rev_min, pro_rev)
-        col_name = ['ProceedsRevisionMinSlopeDummy']
-        self.full_data[col_name] = pro_rev_minslp
-# =========================
+        self.full_data['ProceedsRevision'] = pro_rev
+
+        slope_dummy_cols = [
+            'PriceRevision',
+            'SharesRevision',
+            'ProceedsRevision'
+            ]
+        slope_dummy_vars = [
+            prc_rev,
+            shares_rev,
+            pro_rev
+            ]
+        for col, var in zip(slope_dummy_cols, slope_dummy_vars):
+            slope_dummy = get_SlopeDummy(var)
+            col_name = f'{col}SlopeDummy'
+            self.full_data[col_name] = slope_dummy
+            
+        bound_dummy_cols = [
+            'PriceRevision',
+            'ProceedsRevision'
+            ]
+        bound_dummy_id = ['Max', 'Min']
+        for col in bound_dummy_cols:
+            for dummy_id in bound_dummy_id:
+                if col == 'PriceRevision':
+                    if dummy_id == 'Max':
+                        bound_dummy = get_DummyMax(offer_prc, max_prc_rg)
+                        bound_slope_dummy = get_SlopeDummyBounds(bound_dummy, prc_rev)
+                        col_name = f'{col}MaxDummy'
+                        col_name_slope = f'{col}MaxSlopeDummy'
+                    else:
+                        bound_dummy = get_DummyMin(offer_prc, min_prc_rg)
+                        bound_slope_dummy = get_SlopeDummyBounds(bound_dummy, prc_rev)
+                        col_name = f'{col}MinDummy'
+                        col_name_slope = f'{col}MinSlopeDummy'
+                else:
+                    if dummy_id == 'Max':
+                        bound_dummy = get_DummyMax(act_pro, exp_pro_max)
+                        bound_slope_dummy = get_SlopeDummyBounds(bound_dummy, pro_rev)
+                        col_name = f'{col}MaxDummy'
+                        col_name_slope = f'{col}MaxSlopeDummy'
+                    else:
+                        bound_dummy = get_DummyMin(act_pro, exp_pro_min)
+                        bound_slope_dummy = get_SlopeDummyBounds(bound_dummy, pro_rev)
+                        col_name = f'{col}MinDummy'
+                        col_name_slope = f'{col}MinSlopeDummy'
+                    
+                self.full_data[col_name] = bound_dummy
+                self.full_data[col_name_slope] = bound_slope_dummy
+                    
     def outlier_adjustment(self, whisker_factor, adj_outliers):
         if adj_outliers == True:
-            drop_cols = ['Dummy', 'SlopeDummy', 'Min', 'Max',
-                         'UnderwriterRank', 'TechSector', 
-                         'AMEX', 'NASDQ', 'NYSE', 'IssueDate'
+            drop_cols = [
+                'Dummy', 'SlopeDummy', 'Min', 'Max',
+                'UnderwriterRank', 'TechSector', 
+                'AMEX', 'NASDQ', 'NYSE', 'IssueDate'
                       ]
             outlier_cols = []
             for col in model_cols:
@@ -403,13 +422,13 @@ class FeatureEngineering:
                                       numalign = 'center',
                                       showindex = True)
             
-            print(100*'=')
+            print(110*'=')
             print('Descriptive statistic for outlier identification')
-            print(100*'=', '\n')
+            print(110*'=', '\n')
             print(plot_desc_stat)
             print(95*'-')
             print(f'Number of observations: {nobs}')
-            print(100*'=', '\n\n\n\n')
+            print(110*'=', '\n\n\n\n')
 # =========================
 # The entries in the array adj_whiskers display the the lower and 
 # upper tresholds to identify outliers. The order must refer to 
@@ -469,7 +488,8 @@ class FeatureEngineering:
                 plt.hist(data, bins = 50)
                 plt.xlabel('Value')
                 plt.ylabel('Frequency')
-                plt.title(f'{col} adjusted for outliers')
+                plt.title(f'{col} adjusted for outliers', 
+                          fontdict = title_size)
                 plt.grid(True)
         
             desc_stat_adj.index = desc_stat_adj.index.rename('Variable')
@@ -481,14 +501,14 @@ class FeatureEngineering:
                                           showindex = True)
             plot_desc_stat_adj = plot_desc_stat_adj.replace('nan', '---')
             
-            print(100*'=')
+            print(110*'=')
             print('Descriptive statistic after outlier adjustments')
-            print(100*'=', '\n')
+            print(110*'=', '\n')
             print(plot_desc_stat_adj)
             print(95*'-')
             print(f'Number of observations after adjustments: {nobs_adj}')
             print(f'Number of removed outliers: {n_outliers}')
-            print(100*'=', '\n\n')
+            print(110*'=', '\n\n')
        
             self.model_data = self.full_data[model_cols]
         else:
