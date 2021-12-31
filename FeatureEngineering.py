@@ -9,21 +9,28 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from pandas.tseries.offsets import DateOffset
-from GetData import *
-from Visualization import *
+from bs4 import BeautifulSoup
 import re 
 from re import search
 from tabulate import tabulate 
 import warnings
 import os
+from GetData import *
+from Visualization import *
+from Generic_Parser import *
+from MOD_Load_MasterDictionary_v2020 import *
+import MOD_Load_MasterDictionary_v2020 as LM
 warnings.filterwarnings("ignore")
 
 model_cols = [
     'InitialReturn', 
     'UnderwriterRank', 
     'TotalAssets',
-    'TechSector', 
-    'AMEX', 'NASDQ', 'NYSE',
+    'TechSector',
+    'VenturedBacked',
+    'AMEX', 
+    'NASDQ', 
+    'NYSE',
     'MarketReturn', 
     'MarketReturnSlopeDummy',
     'SectorReturn', 
@@ -53,7 +60,7 @@ class FeatureEngineering:
         self.full_data = prep_obj.full_data
         self.scale = scale_factor
         
-    def preprocessing(self):
+    def preprocessing(self, adj_raw_prospectuses):
         total_assets = self.full_data['TotalAssetsBeforeTheOfferingMil']
         total_assets = total_assets.str.replace(',', '')
         total_assets = total_assets.astype(float)
@@ -82,7 +89,44 @@ class FeatureEngineering:
                                   self.prep_obj.port_data[merge_cols],
                                   how = 'left',
                                   on = 'DealNumber')
-
+# =========================
+        if adj_raw_prospectuses == True:
+            self.prospectus_forms = ['InitialProspectus', 'FinalProspectus']
+            unclassified_prospectuses = 0
+            classified_prospectuses = 0
+            for form in self.prospectus_forms:
+                iter_count = 0
+                progress = 100
+                print('Preprocessing of raw prospectuses started', '\n')
+                print(f'Prospectus type: {form}')
+                for index, row in self.full_data.iterrows():
+                    iter_count += 1
+                    if iter_count % progress == 0:
+                        print(f'Progress: {iter_count} items')
+                    if pd.isnull(row[f'{form}FileName']) == False:
+                        file = row[f'{form}FileName']
+                        path = raw_prospectus_path+'\\'+form+'\\'+file
+                        try:
+                            raw_prospectus = open(os.path.join(path, file),'r')
+                            soup_html = BeautifulSoup(raw_prospectus, 'lxml')
+                            prospectus = soup_html.get_text()
+                            prospectus = re.sub(r"\n", "", prospectus)
+                            
+                            file_name = row['DealNumber']
+                            file_name = f'{file_name}.txt'
+                            path_name = input_path+'\\'+form
+                            output_file = open(path_name+'\\'+file_name,
+                                               'w', encoding='utf-8')
+                            output_file.write(prospectus)
+                            output_file.close()
+                            classified_prospectuses += 1
+                        except:
+                            unclassified_prospectuses += 1
+                            
+            self.classified_prospectuses = classified_prospectuses
+            self.unclassified_prospectuses = unclassified_prospectuses
+            print('Preprocessing of raw prospectuses finished')
+                            
     def firm_features(self):
         close_prc = self.full_data['ClosePrice']
         offer_prc = self.full_data['OfferPrice']
@@ -134,10 +178,34 @@ class FeatureEngineering:
         self.full_data['ExpectedProceedsMax'] = exp_pro_max
         self.full_data['ActualProceeds'] = act_pro
 # =========================
+        exchange = self.full_data['ExchangeWhereIssuWillBeLi']
+        exchange_dummies = pd.get_dummies(exchange)
+        exchange_dummies = exchange_dummies.astype(float)
+        exchange_cols = ['AMEX', 'NASDQ', 'NYSE']
+        
+        self.full_data = pd.concat([self.full_data, 
+                                    exchange_dummies[exchange_cols]], 
+                                   axis = 1)
+        
         nan_ident = pd.isnull(self.full_data['ExchangeWhereIssuWillBeLi']) == True
         exchange_nan_idx = self.full_data.loc[nan_ident].index
-        exchange_cols = ['AMEX', 'NASDQ', 'NYSE']
         self.full_data.loc[exchange_nan_idx, exchange_cols] = np.nan
+# =========================
+        vent = self.full_data['VentureBacked']
+        vent_dummy = pd.get_dummies(vent)
+        vent_dummy = vent_dummy['Yes']
+        vent_dummy = vent_dummy.astype(float)
+        col_name = 'VenturedBacked'
+        vent_dummy.name = col_name
+        
+        self.full_data = pd.concat([self.full_data, 
+                                   vent_dummy], 
+                                   axis = 1)
+                                    
+        nan_ident = pd.isnull(self.full_data['VentureBacked']) == True
+        vent_nan_idx = self.full_data.loc[nan_ident].index
+        self.full_data.loc[vent_nan_idx, col_name] = np.nan
+        
         
     def public_features(self, index_weight, port_days, adj_portfolio_rets):
         if adj_portfolio_rets == True:
@@ -260,33 +328,48 @@ class FeatureEngineering:
                                   on = 'DealNumber')
             
     def private_features(self, adj_words_revison):
-        if adj_words_revison == True:
-            init_prosp_path = prospectus_path+'\\'+'Initial_Prospects'
-            final_prosp_path = prospectus_path+'\\'+'Final_Prospects'
+        if adj_words_revison == True:    
             
-            for index, row in self.full_data.iterrows():
-                if pd.isnull(row['IP_FileName']) == False:
-                    init_file_name = row['IP_FileName']
-                    init_path = init_prosp_path+'\\'+init_file_name
-                    try:
-                        file = open(os.path.join(init_path, init_file_name),'r')
-                        self.full_data.loc[index, 'IP_FileMatch'] = True
-                    except:
-                        self.full_data.loc[index, 'IP_FileMatch'] = np.nan
-                else:
-                    self.full_data.loc[index, 'IP_FileMatch'] = np.nan
+            col_names = ['DealNumber', 'file size', 'number of words', 
+                         '% negative', '% positive', '% uncertainty', 
+                         '% litigious', '% strong modal', '% weak modal',
+                         '% constraining', '# of alphabetic', '# of digits',
+                         '# of numbers', 'avg # of syllables per word', 
+                         'average word length', 'vocabulary']
+            
+            prospectus_forms = ['InitialProspectus', 'FinalProspectus']
+            for form in prospectus_forms:
+                iter_count = 0
+                progress = 100
+                print(f'Text analysis of {form} started')
+                
+                output_file = f'{form}_{prosp_result_file}'
+                f_out = open(output_path+'\\'+output_file, 'w')
+                wr = csv.writer(f_out, lineterminator='\n')
+                wr.writerow(col_names)
 
-                if pd.isnull(row['FP_FileName']) == False:
-                    final_file_name = row['FP_FileName']
-                    final_path = final_prosp_path+'\\'+final_file_name
-                    try:
-                        file = open(os.path.join(final_path, final_file_name),'r')
-                        self.full_data.loc[index, 'FP_FileMatch'] = True
-                    except:
-                        self.full_data.loc[index, 'FP_FileMatch'] = np.nan
-                else:
-                    self.full_data.loc[index, 'FP_FileMatch'] = np.nan
-# =========================        
+                file_path = input_path+'\\'+form
+                file_list = glob.glob(file_path+'\\*.*')
+                for file in file_list:
+                    iter_count += 1
+                    if iter_count % progress == 0:
+                        print(f'Progress: {iter_count} items')
+                        
+                    dealnumber = re.findall('[0-9]+', file)
+                    dealnumber = int(dealnumber[0])
+                    with open(file, 'r', encoding='UTF-8', 
+                              errors='ignore') as f_in:
+                        doc = f_in.read()
+                    doc = re.sub('(May|MAY)', ' ', doc)
+                    doc = doc.upper()
+
+                    output_data = get_data(doc)
+                    output_data[0] = dealnumber
+                    output_data[1] = len(doc)
+                    wr.writerow(output_data)
+                print(f'Text analysis of {form} finished', 
+                      '\n')
+# =========================
         offer_prc = self.full_data['OfferPrice']
         mid_prc_rg = self.full_data['MeanPriceRange']
         prc_rev = (offer_prc / mid_prc_rg) -1
@@ -333,37 +416,38 @@ class FeatureEngineering:
             for dummy_id in bound_dummy_id:
                 if col == 'PriceRevision':
                     if dummy_id == 'Max':
-                        bound_dummy = get_DummyMax(offer_prc, max_prc_rg)
-                        bound_slope_dummy = get_SlopeDummyBounds(bound_dummy, prc_rev)
+                        bnd_dummy = get_DummyMax(offer_prc, max_prc_rg)
+                        bnd_slp_dummy = get_SlopeDummyBounds(bnd_dummy, prc_rev)
                         col_name = f'{col}MaxDummy'
                         col_name_slope = f'{col}MaxSlopeDummy'
                     else:
-                        bound_dummy = get_DummyMin(offer_prc, min_prc_rg)
-                        bound_slope_dummy = get_SlopeDummyBounds(bound_dummy, prc_rev)
+                        bnd_dummy = get_DummyMin(offer_prc, min_prc_rg)
+                        bnd_slp_dummy = get_SlopeDummyBounds(bnd_dummy, prc_rev)
                         col_name = f'{col}MinDummy'
                         col_name_slope = f'{col}MinSlopeDummy'
                 else:
                     if dummy_id == 'Max':
-                        bound_dummy = get_DummyMax(act_pro, exp_pro_max)
-                        bound_slope_dummy = get_SlopeDummyBounds(bound_dummy, pro_rev)
+                        bnd_dummy = get_DummyMax(act_pro, exp_pro_max)
+                        bnd_slp_dummy = get_SlopeDummyBounds(bnd_dummy, pro_rev)
                         col_name = f'{col}MaxDummy'
                         col_name_slope = f'{col}MaxSlopeDummy'
                     else:
-                        bound_dummy = get_DummyMin(act_pro, exp_pro_min)
-                        bound_slope_dummy = get_SlopeDummyBounds(bound_dummy, pro_rev)
+                        bnd_dummy = get_DummyMin(act_pro, exp_pro_min)
+                        bnd_slp_dummy = get_SlopeDummyBounds(bnd_dummy, pro_rev)
                         col_name = f'{col}MinDummy'
                         col_name_slope = f'{col}MinSlopeDummy'
                     
-                self.full_data[col_name] = bound_dummy
-                self.full_data[col_name_slope] = bound_slope_dummy
-                    
+                self.full_data[col_name] = bnd_dummy
+                self.full_data[col_name_slope] = bnd_slp_dummy
+           
     def outlier_adjustment(self, whisker_factor, adj_outliers):
         if adj_outliers == True:
             drop_cols = [
                 'Dummy', 'SlopeDummy', 'Min', 'Max',
                 'UnderwriterRank', 'TechSector', 
-                'AMEX', 'NASDQ', 'NYSE', 'IssueDate'
-                      ]
+                'VenturedBacked', 'AMEX', 'NASDQ', 'NYSE', 
+                'IssueDate'
+                ]
             outlier_cols = []
             for col in model_cols:
                 if not any(char in col for char in drop_cols):
@@ -372,9 +456,9 @@ class FeatureEngineering:
             idx = outlier_cols
             measure_cols = [
                     'Mean', 'Median',
-                    'Min', 'Max',
-                    'StandDev',
-                    'LowWhisker', 'UpWhisker'
+                    'Minimum', 'Maximum',
+                    'StandardDeviation',
+                    'LowerWhisker', 'UpperWhisker'
                     ]
         
             stat_data = self.full_data[outlier_cols]
@@ -395,14 +479,14 @@ class FeatureEngineering:
                 plt.figure(figsize = (20,10))
                 plt.subplot(121)
                 plt.hist(data, bins = 50)
-                plt.xlabel('Value')
-                plt.ylabel('Frequency')
-                plt.title(f'{col}')
+                plt.xlabel('Value', fontdict = xlabel_size)
+                plt.ylabel('Frequency', fontdict = ylabel_size)
+                plt.title(f'{col}', fontdict = title_size)
                 plt.grid(True)
                 plt.subplot(122)
                 plt.boxplot(data, whis = whisker_factor)
-                plt.xlabel('Value')
-                plt.title(f'{col}')
+                plt.xlabel('Value', fontdict = xlabel_size)
+                plt.title(f'{col}', fontdict = title_size)
             
                 q1 = np.percentile(data, 25)
                 q3 = np.percentile(data, 75)
@@ -410,8 +494,8 @@ class FeatureEngineering:
                 whisker_low = q1 - (whisker_factor * iqr)
                 whisker_up = q3 + (whisker_factor * iqr)
             
-                desc_stat.loc[col, 'LowWhisk'] = whisker_low
-                desc_stat.loc[col, 'UpWhisk'] = whisker_up
+                desc_stat.loc[col, 'LowerWhisker'] = whisker_low
+                desc_stat.loc[col, 'UpperWhisker'] = whisker_up
             
             desc_stat.index = desc_stat.index.rename('Variable')
             desc_stat.columns = measure_cols
@@ -422,13 +506,13 @@ class FeatureEngineering:
                                       numalign = 'center',
                                       showindex = True)
             
-            print(110*'=')
+            print(cutting_line)
             print('Descriptive statistic for outlier identification')
-            print(110*'=', '\n')
+            print(cutting_line, '\n')
             print(plot_desc_stat)
-            print(95*'-')
+            print(cutting_line_thin)
             print(f'Number of observations: {nobs}')
-            print(110*'=', '\n\n\n\n')
+            print(cutting_line, '\n\n\n\n')
 # =========================
 # The entries in the array adj_whiskers display the the lower and 
 # upper tresholds to identify outliers. The order must refer to 
@@ -448,7 +532,8 @@ class FeatureEngineering:
                 [0, 1338] 
                 ])
         
-            adj_whisk_cols = ['AdjustedLowWhisker', 'AdjustedUpWhisker']
+            adj_whisk_cols = ['AdjustedLowerWhisker', 
+                              'AdjustedUpperWhisker']
             adj_whiskers = pd.DataFrame(adj_whiskers)
             adj_whiskers.columns = adj_whisk_cols
             adj_whiskers.index = adj_outlier_cols
@@ -486,8 +571,8 @@ class FeatureEngineering:
                 data = self.full_data[col]
                 plt.figure(figsize = (20,10))
                 plt.hist(data, bins = 50)
-                plt.xlabel('Value')
-                plt.ylabel('Frequency')
+                plt.xlabel('Value', fontdict = xlabel_size)
+                plt.ylabel('Frequency', fontdict = ylabel_size)
                 plt.title(f'{col} adjusted for outliers', 
                           fontdict = title_size)
                 plt.grid(True)
@@ -501,14 +586,14 @@ class FeatureEngineering:
                                           showindex = True)
             plot_desc_stat_adj = plot_desc_stat_adj.replace('nan', '---')
             
-            print(110*'=')
+            print(cutting_line)
             print('Descriptive statistic after outlier adjustments')
-            print(110*'=', '\n')
+            print(cutting_line, '\n')
             print(plot_desc_stat_adj)
-            print(95*'-')
+            print(cutting_line_thin)
             print(f'Number of observations after adjustments: {nobs_adj}')
             print(f'Number of removed outliers: {n_outliers}')
-            print(110*'=', '\n\n')
+            print(cutting_line, '\n\n')
        
             self.model_data = self.full_data[model_cols]
         else:
