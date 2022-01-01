@@ -91,10 +91,10 @@ class FeatureEngineering:
                                   on = 'DealNumber')
 # =========================
         if adj_raw_prospectuses == True:
-            self.prospectus_forms = ['InitialProspectus', 'FinalProspectus']
+            prospectus_forms = ['InitialProspectus', 'FinalProspectus']
             unclassified_prospectuses = 0
             classified_prospectuses = 0
-            for form in self.prospectus_forms:
+            for form in prospectus_forms:
                 iter_count = 0
                 progress = 100
                 print('Preprocessing of raw prospectuses started', '\n')
@@ -329,24 +329,30 @@ class FeatureEngineering:
             
     def private_features(self, adj_words_revison):
         if adj_words_revison == True:    
-            
-            col_names = ['DealNumber', 'file size', 'number of words', 
-                         '% negative', '% positive', '% uncertainty', 
-                         '% litigious', '% strong modal', '% weak modal',
-                         '% constraining', '# of alphabetic', '# of digits',
-                         '# of numbers', 'avg # of syllables per word', 
-                         'average word length', 'vocabulary']
+            col_names = ['DealNumber', 'FileSize', 'WordsCount', 
+                          'Negative', 'Positive', 'Uncertain', 
+                          'Litigious', 'StrongModal', 'WeakModal',
+                          'Constraining', 'AlphabeticCount', 'DigitsCount',
+                          'NumbersCount', 'AvgSyllablesPerWord', 
+                          'AvgWordLength', 'Vocabulary']
             
             prospectus_forms = ['InitialProspectus', 'FinalProspectus']
-            for form in prospectus_forms:
+            for form in prospectus_forms:          
+                col_names_adj = []
+                for col in col_names:
+                    if col == 'DealNumber':
+                        col_names_adj.append(col)
+                    else:
+                        col_adj = f'{form}{col}'
+                        col_names_adj.append(col_adj)
+                        
                 iter_count = 0
                 progress = 100
-                print(f'Text analysis of {form} started')
-                
+                print(f'Text analysis of {form} started')                 
                 output_file = f'{form}_{prosp_result_file}'
                 f_out = open(output_path+'\\'+output_file, 'w')
                 wr = csv.writer(f_out, lineterminator='\n')
-                wr.writerow(col_names)
+                wr.writerow(col_names_adj)
 
                 file_path = input_path+'\\'+form
                 file_list = glob.glob(file_path+'\\*.*')
@@ -367,8 +373,25 @@ class FeatureEngineering:
                     output_data[0] = dealnumber
                     output_data[1] = len(doc)
                     wr.writerow(output_data)
+                f_out.close()
                 print(f'Text analysis of {form} finished', 
                       '\n')
+                
+        init_prosp_file = f'InitialProspectus_{prosp_result_file}'
+        init_prosp = pd.read_csv(output_path+'\\'+init_prosp_file)
+        
+        final_prosp_file = f'FinalProspectus_{prosp_result_file}'
+        final_prosp = pd.read_csv(output_path+'\\'+final_prosp_file)
+        
+        self.full_data = pd.merge(self.full_data,
+                                  init_prosp,
+                                  how = 'left',
+                                  on = 'DealNumber')
+        
+        self.full_data = pd.merge(self.full_data,
+                                  final_prosp,
+                                  how = 'left',
+                                  on = 'DealNumber')
 # =========================
         offer_prc = self.full_data['OfferPrice']
         mid_prc_rg = self.full_data['MeanPriceRange']
