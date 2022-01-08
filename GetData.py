@@ -9,6 +9,8 @@ import pandas as pd
 import numpy as np
 import pickle
 import os
+import warnings
+warnings.filterwarnings("ignore")
 
 exit_message = 'Download of CRSP data for quotes and returns necessary due to time period adjustments'
 exit_message2 = 'Adjustment mode for explanatory variables is active. Select variables to consider. Otherwise set adjustment parameter to False for result generation.'
@@ -27,9 +29,13 @@ fmb_result_file = 'RegressionResult_FMB.csv'
 fmb_keyfig_file = 'KeyFigures_OLS.csv'
 fmb_aggresult_file = 'AggregatedRegressionResult_FMB.csv'
 fmb_aggkeyfig_file = 'AggregatedKeyFigures_FMB.csv'
+prosp_result_file = 'TextAnalysisResults.csv'
+master_dict_log_file = 'MasterDictionaryLogFile.txt'
+count_portfolio_cons = 'SectorPortfolioCountConstituents.csv'
 
 
 input_path = r'C:\Users\Matthias Pudel\OneDrive\Studium\Master\Master Thesis\Empirical Evidence\Input Data'
+raw_prospectus_path = r'D:\OneDrive_Backup\Master\MasterThesis\ProspectusData'
 sdc_raw_file = 'sdc_full_raw.csv'
 total_assets_file = 'sdc_total_assets.csv'
 quotes_file = 'IPO_Quotes.csv'
@@ -37,7 +43,9 @@ uw_file = 'UnderwriterRank.xlsx'
 cpi_file = 'CPI_80_21.xlsx'
 returns_file = 'IPO_Returns.csv'
 index_returns_file = 'CRSP_Market_Returns.csv'
-edgar_file = 'Price_Range_and_Share_Data_Adjusted.csv'
+prosp_merge_file = '100_IPO_data_merged_by_DealNumber_without_any_exclusions.csv'
+master_dict_file = 'LoughranMcDonald_MasterDictionary_2020.csv'
+industry_dummies_file = 'FamaFrenchIndustryDummies.xlsx'
 
 
 def save_obj(obj, path, filename):
