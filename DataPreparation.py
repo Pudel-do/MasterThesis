@@ -13,6 +13,8 @@ from pandas.tseries.offsets import DateOffset
 from fuzzywuzzy import fuzz
 from fuzzywuzzy import process
 from GetData import *
+import warnings
+warnings.filterwarnings("ignore")
 
 class DataPreparation:
     def __init__(self, start_date, end_date):
@@ -29,7 +31,7 @@ class DataPreparation:
         sdc = sdc_raw.drop_duplicates(subset = dup_ident)
         ext_port_dt = self.start_date - DateOffset(years=1)
         
-        rough_filter = (
+        rough_flt = (
             (sdc['IssueDate'] >= ext_port_dt) &\
             (sdc['IssueDate'] <= self.end_date) &\
             (sdc['FilingDate'] <= self.end_date) &\
@@ -37,7 +39,7 @@ class DataPreparation:
             (pd.isnull(sdc['FilingDate']) == False) &\
             (pd.isnull(sdc['CUSIP9']) == False)
             )   
-        sdc = sdc.loc[rough_filter]
+        sdc = sdc.loc[rough_flt]
 
         start_year = ext_port_dt.strftime('%Y')
         end_year = self.end_date.strftime('%Y')
@@ -51,22 +53,29 @@ class DataPreparation:
             
             sys.exit(exit_message)
 # =========================
-        ext_filter = (
+        extended_flt = (
             (sdc['IPO'] == 'Yes') &\
             (sdc['Units'] == 'No') &\
             (sdc['ADR'] == 'No') &\
             (sdc['CEF'] == 'No') &\
             (pd.isnull(sdc['REIT']) == True) &\
             (sdc['OfferPrice'] >= 5)
-            )
+                )
+            
+        exchange_flt = (
+            (sdc['ExchangeWhereIssuWillBeLi'] == 'NASDQ') |\
+            (sdc['ExchangeWhereIssuWillBeLi'] == 'NYSE') |\
+            (sdc['ExchangeWhereIssuWillBeLi'] == 'AMEX')
+                )
                               
-        port_data = sdc.loc[ext_filter]
+        port_data = sdc.loc[extended_flt]
+        port_data = port_data.loc[exchange_flt]
         base_filter = port_data['IssueDate']>=self.start_date
         base = port_data.loc[base_filter]
         self.port_data = port_data
         self.base = base
         
-    def build_aux_vars(self):   
+    def build_aux_vars(self, industry_treshold):   
         onebday_offset = pd.offsets.BusinessDay(1)
         twobday_offset = pd.offsets.BusinessDay(2)
         first_trade_dt = self.base['IssueDate'] + onebday_offset
@@ -92,20 +101,51 @@ class DataPreparation:
         registration_days = (self.base['IssueDate'] - self.base['FilingDate'])
         registration_days = registration_days.dt.days
         self.base['RegistrationDays'] = registration_days
-        
-    def extended_preprocessing(self, adj_uw_matching):
-        exchange = self.base['ExchangeWhereIssuWillBeLi']
-        exchange_dummies = pd.get_dummies(exchange)
-        exchange_dummies = exchange_dummies.astype(float)
-        exchange_cols = ['AMEX', 'NASDQ', 'NYSE']
-        
-        self.base = pd.concat([self.base, 
-                              exchange_dummies[exchange_cols]], 
-                             axis = 1)
 # =========================
-# Use Price Range and Share Data from Gerrit refering to the mid price range
-# and shares filed to fill missing values for columns OriginalMiddleOfFilingPriceRange
-# and SharesFiledSumOfAllMkts
+        ff_industry_data = pd.read_excel(input_path+'\\'+industry_dummies_file, 
+                                         engine = 'openpyxl')
+         
+        fama_french_industries = {}
+        for column in ff_industry_data:
+            industry = ff_industry_data[column]
+            industry = industry.dropna()
+            industries = np.array([])
+            for index, value in industry.items():
+                sample_range = re.findall(r'\b\d+\b', value)
+                low_bound = int(sample_range[0])
+                up_bound = int(sample_range[1])
+                up_bound = up_bound+1
+                sample = np.arange(low_bound, up_bound)
+                industries = np.append(industries, sample)
+
+            col_adj = re.sub('[^a-zA-Z]+', '', column)
+            fama_french_industries[col_adj] = industries
+        
+        col_name = 'FamaFrenchIndustry'
+        for index, row in self.port_data.iterrows():
+            sic_code = row['MainSICCode']
+            if (pd.isnull(sic_code) == False)&\
+            (sic_code.isdecimal() == True):                
+                for key, value in fama_french_industries.items():
+                    sic_code = int(sic_code)
+                    if sic_code in value:
+                        self.port_data.loc[index, col_name] = key         
+            else:
+                self.port_data.loc[index, col_name] = np.nan
+        
+        treshold = industry_treshold
+        indu_dist = self.port_data[col_name]
+        indu_dist = indu_dist.value_counts(normalize=True)
+        indu_dist_adj = indu_dist.where(indu_dist >= treshold)
+        indu_dist_adj = indu_dist_adj.dropna()
+        valid_industries = pd.Series(indu_dist_adj.index)
+        
+        self.industry_dist = indu_dist
+        self.industry_dist_adj = indu_dist_adj
+        self.valid_industries = valid_industries
+        self.base = self.base.join(self.port_data[col_name])
+    
+    def extended_preprocessing(self, adj_uw_matching):
         mean_prc_rg = np.where(pd.isnull(self.base['OriginalMiddleOfFilingPriceRange']) == True,
                                          self.base['AmendedMiddleOfFilingPrice'],
                                          self.base['OriginalMiddleOfFilingPriceRange'])
@@ -131,7 +171,7 @@ class DataPreparation:
         shares_filed = shares_filed.str.replace(',', '')
         shares_filed = shares_filed.astype(float)
         self.base['SharesFiled'] = shares_filed
-# =========================         
+# =========================       
         ritter_data = pd.read_excel(input_path+'\\'+uw_file,
                                             engine = 'openpyxl',
                                             sheet_name = 'UnderwriterRank')
@@ -202,45 +242,50 @@ class DataPreparation:
         self.base = pd.merge(self.base,
                              match_results, 
                              how = 'left',
-                             on = 'DealNumber')
-        
+                             on = 'DealNumber')      
+
         self.full_data = self.base.copy()
         
     def data_merging(self, adj_close_price):
-        edgar_cols = ['DealNumber', 
-                      'FirstProspectPath', 'First_PR_Fil_file_path',
-                      'LastProspectPath', 'Last_PR_Fil_file_path']
-        edgar_data = pd.read_csv(input_path+'\\'+edgar_file, usecols = edgar_cols)
-        self.full_data = pd.merge(self.full_data,
-                                  edgar_data,
-                                  how = 'left',
-                                  on = 'DealNumber')
+        input_cols = [
+            'DealNumber',
+            'EDGAR_Initial_Prospectus_FormType_CIK_merged', 
+            'EDGAR_Initial_Prospectus_DateFiled_CIK_merged', 
+            'EDGAR_Initial_Prospectus_FileName_CIK_merged',
+            'EDGAR_Final_Prospectus_FormType_CIK_merged', 
+            'EDGAR_Final_Prospectus_DateFiled_CIK_merged', 
+            'EDGAR_Final_Prospectus_FileName_CIK_merged',
+            ]
+        output_cols = [
+            'DealNumber',
+            'InitialProspectusType', 
+            'InitialProspectusDateFiled', 
+            'InitialProspectusFileName',
+            'FinalProspectusType', 
+            'FinalProspectusDateFiled', 
+            'FinalProspectusFileName',
+            ]
         
-        last_prosp_path = r'D:\OneDrive_Backup\Master\MasterThesis\ProspectusData\Final_Prospects'
-        first_prosp_path = r'D:\OneDrive_Backup\Master\MasterThesis\ProspectusData\Initial_Prospects'
-        for index, row in self.full_data.iterrows():
-            if pd.isnull(row['FirstProspectPath']) == False:
-                first_prosp_file = row['FirstProspectPath']
-                try:
-                    path = first_prosp_path+'\\'+first_prosp_file
-                    file = open(os.path.join(path, first_prosp_file),'r')
-                    self.full_data.loc[index, 'FirstProspectIndicator'] = 'Present'
-                except:
-                    self.full_data.loc[index, 'FirstProspectIndicator'] = np.nan
-            else:
-                self.full_data.loc[index, 'FirstProspectIndicator'] = np.nan
-
-            if pd.isnull(row['LastProspectPath']) == False:
-                last_prosp_file = row['LastProspectPath']
-                try:
-                    path = last_prosp_path+'\\'+last_prosp_file
-                    file = open(os.path.join(path, last_prosp_file),'r')
-                    self.full_data.loc[index, 'LastProspectIndicator'] = 'Present'
-                except:
-                    self.full_data.loc[index, 'LastProspectIndicator'] = np.nan
-            else:
-                self.full_data.loc[index, 'LastProspectIndicator'] = np.nan
-                
+        prospectus_data = pd.read_csv(input_path+'\\'+prosp_merge_file,
+                                 usecols = input_cols)
+        prospectus_data = prospectus_data.dropna()
+        prospectus_data.columns = output_cols
+        
+        file_cols = ['InitialProspectusFileName', 'FinalProspectusFileName']
+        remove_char = 'edgar/data/'
+        replace_char = '/'
+        
+        adj_cols = prospectus_data[file_cols]
+        adj_cols = adj_cols.replace(remove_char,'', regex = True)
+        adj_cols = adj_cols.replace(replace_char,'_', regex = True)
+        for col in file_cols:
+            adj_cols[col] = adj_cols[col].str.strip()
+            
+        prospectus_data[file_cols] = adj_cols
+        self.full_data = pd.merge(self.full_data,
+                                  prospectus_data,
+                                  how = 'left',
+                                  on = 'DealNumber')                
 # =========================         
         total_assets = pd.read_csv(input_path+'\\'+total_assets_file)
         self.full_data = pd.merge(self.full_data,
