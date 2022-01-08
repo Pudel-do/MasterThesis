@@ -6,13 +6,13 @@ Created on Sat Nov 20 14:37:04 2021
 """
 
 import pandas as pd
-import warnings
 from DataPreparation import DataPreparation
 from FeatureEngineering import FeatureEngineering
 from Regression import Regression
 from GetData import *
 from Visualization import *
-warnings.filterwarnings("ignore")
+import warnings
+# warnings.filterwarnings("ignore")
 
 # ===========================================
 # Empirical Evidence - Parameter and Settings
@@ -32,22 +32,19 @@ adj_data_prep = False
 adj_uw_matching = False
 adj_time_range = False
 adj_close_price = False
+industry_treshold = 0
 # =========================
 # Feature Engineering
 # =========================
 adj_feat_eng = True  
-adj_public_feat = False
-adj_outliers = True
-plot_outliers = True
-adj_words_rev = True
+adj_public_proxies = True
+adj_raw_prospectuses = False
+adj_prospectus_analysis = False
+plot_outliers = False 
 index_weight = 'Equal'
 port_days = 15
 scale_factor = 100
-whisker_factor = 1.5
-# =========================
-# Visualization
-# =========================
-equal_std = True
+whisker_factor = 15
 # =========================
 # Regression
 # =========================
@@ -55,30 +52,38 @@ clean_file = False
 adj_reg_cols = False 
 reg_vars = [
     'InitialReturn', 
-    'UnderwriterRank', 'TotalAssets',
-    'TechSector', 'AMEX', 'NASDQ', 'NYSE',
-    'MarketReturn', 'MarketReturnSlopeDummy',
-    'SectorReturn', 'SectorReturnSlopeDummy',
+    'UnderwriterRank', 
+    'TotalAssets',
+    'TechDummy',
+    'VentureDummy',
+    # 'AMEX', 
+    # 'NASDQ', 
+    # 'NYSE',
+    'MarketReturn', 
+    # 'MarketReturnSlopeDummy',
+    'SectorReturn', 
+    'SectorReturnSlopeDummy',
+    'WordsRevisionDummy',
     'PriceRevision', 
     # 'PriceRevisionSlopeDummy',
-    # 'PriceRevisionMaxDummy',
+    'PriceRevisionMaxDummy',
     # 'PriceRevisionMaxSlopeDummy', 
-    'PriceRevisionMinDummy',
-    'PriceRevisionMinSlopeDummy',
-    'SharesRevision', 
+    # 'PriceRevisionMinDummy',
+    # 'PriceRevisionMinSlopeDummy',
+    # 'SharesRevision', 
     # 'SharesRevisionSlopeDummy',
-    'ProceedsRevision', 
+    # 'ProceedsRevision', 
     # 'ProceedsRevisionSlopeDummy',
     # 'ProceedsRevisionMaxDummy',
     # 'ProceedsRevisionMaxSlopeDummy', 
-    'ProceedsRevisionMinDummy',
-    'ProceedsRevisionMinSlopeDummy'
+    # 'ProceedsRevisionMinDummy',
+    # 'ProceedsRevisionMinSlopeDummy',
     ]
 # ===========================================
 if adj_data_prep == True:
     prep_obj = DataPreparation(start_date, end_date)
     prep_obj.rough_preprocessing(adj_time_range)
-    prep_obj.build_aux_vars()
+    prep_obj.build_aux_vars(industry_treshold)
     prep_obj.extended_preprocessing(adj_uw_matching)
     prep_obj.data_merging(adj_close_price)
     obj_file = prep_obj_file
@@ -91,12 +96,11 @@ else:
     
 if adj_feat_eng == True:
     feat_eng_obj = FeatureEngineering(prep_obj, scale_factor)
-    feat_eng_obj.preprocessing()
+    feat_eng_obj.preprocessing(adj_raw_prospectuses)
     feat_eng_obj.firm_features()
-    feat_eng_obj.public_features(index_weight, port_days, adj_public_feat)
-    feat_eng_obj.private_features()
-    if adj_outliers == True:
-        feat_eng_obj.outlier_adjustment(plot_outliers, whisker_factor)
+    feat_eng_obj.public_features(index_weight, port_days, adj_public_proxies)
+    feat_eng_obj.private_features(adj_prospectus_analysis)
+    feat_eng_obj.outlier_adjustment(whisker_factor, plot_outliers)
     obj_file = feat_eng_obj_file
     obj_file = f'{start_year}_{end_year}_{obj_file}'
     save_obj(feat_eng_obj, output_path, obj_file)
@@ -113,10 +117,10 @@ reg_obj.build_results(adj_reg_cols, clean_file)
 obj_file = reg_obj_file
 obj_file = f'{start_year}_{end_year}_{obj_file}'
 save_obj(reg_obj, output_path, obj_file)
-     
-desc_stat = descriptive_statistic(reg_obj, equal_std)
-plot_regression_results(reg_obj)
+# ===========================================
+full_data = feat_eng_obj.full_data
+SectorDistribution(prep_obj, True)
+DescStat_ProspectusAnalysis(feat_eng_obj)
+DescStat_RegressionSample(reg_obj)
+RegressionResults(reg_obj)
 
-
-
-    
