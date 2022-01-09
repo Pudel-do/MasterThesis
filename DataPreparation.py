@@ -179,7 +179,8 @@ class DataPreparation:
         name = ritter_data['Underwriter Name']
         name = name[:-2]
         name = name.map(lambda x: re.sub(r'\W+', '', x))
-        name = name.str.casefold() 
+        name = name.str.upper()
+        name = name.str.strip()
         name = pd.DataFrame(name)
         name.columns = ['Name']
         
@@ -211,24 +212,23 @@ class DataPreparation:
                 iter_count += 1
                 if iter_count % progress == 0:
                     print(f'Progress: {iter_count} items')
-                value = row['LeadManagersLongName']
-                char_pos = value.find('|')
-                if char_pos != -1:
-                    sdc_name = value[:char_pos]
-                    sdc_name = re.sub(r'\W+', '', sdc_name)
-                    sdc_name = sdc_name.casefold()
-                else:
-                    sdc_name = value
-                    sdc_name = re.sub(r'\W+', '', sdc_name)
-                    sdc_name = sdc_name.casefold()
-                
-                matching = process.extractOne(sdc_name, 
-                                              rank_data['Name'])
-                
-                match_results.loc[index, 'DealNumber'] = row['DealNumber']
-                match_results.loc[index, 'SDC_Name'] = sdc_name
-                match_results.loc[index, 'Ritter_Name'] = matching[0]
-                match_results.loc[index, 'Matching_Level'] = matching[1]
+                uwriters = row['LeadManagersLongName']
+                uwriters = re.findall(r'[^|]+(?=|[^|]*$)', uwriters)
+                match_lvl_treshold = 0
+                for uwriter in uwriters:
+                    uwriter_adj = re.sub(r'\W+', '', uwriter)
+                    uwriter_adj = uwriter_adj.upper()
+                    uwriter_adj = uwriter_adj.strip()
+                    
+                    matching = process.extractOne(uwriter_adj, rank_data['Name'])
+                    match_lvl = matching[1]
+                    match_name = matching[0]
+                    if match_lvl > match_lvl_treshold:
+                        match_lvl_treshold = match_lvl
+                        match_results.loc[index, 'DealNumber'] = row['DealNumber']
+                        match_results.loc[index, 'SDC_Name'] = uwriter_adj
+                        match_results.loc[index, 'Ritter_Name'] = match_name
+                        match_results.loc[index, 'Matching_Level'] = match_lvl
             
             file_name = uw_matching_file
             file_name = f'{self.start_year}_{self.end_year}_{file_name}'
