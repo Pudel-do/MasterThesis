@@ -45,6 +45,7 @@ class FeatureEngineering:
         self.prep_obj = prep_obj
         self.full_data = prep_obj.full_data
         self.scale = scale_factor
+        self.model_cols = model_cols
         
     def preprocessing(self, adj_raw_prospectuses):
         total_assets = self.full_data['TotalAssetsBeforeTheOfferingMil']
@@ -69,8 +70,8 @@ class FeatureEngineering:
                 sector_name = np.nan
             sector.loc[index] = sector_name
             
-        self.prep_obj.port_data['Sector'] = sector
-        merge_cols = ['DealNumber', 'Sector']
+        self.prep_obj.port_data['TechIndustry'] = sector
+        merge_cols = ['DealNumber', 'TechIndustry']
         self.full_data = pd.merge(self.full_data,
                                   self.prep_obj.port_data[merge_cols],
                                   how = 'left',
@@ -155,11 +156,11 @@ class FeatureEngineering:
 # =========================
         tech_id = 1
         non_tech_id = 0
-        sector = self.full_data['Sector']
+        sector = self.full_data['TechIndustry']
         tech_dummy = np.where(sector == 'Non-Hitech',
                               non_tech_id,
                               tech_id)
-        nan_ident = pd.isnull(self.full_data['Sector']) == True
+        nan_ident = pd.isnull(self.full_data['TechIndustry']) == True
         tech_nan_idx = self.full_data.loc[nan_ident].index
         self.full_data['TechDummy'] = tech_dummy
         self.full_data.loc[tech_nan_idx, 'TechDummy'] = np.nan
@@ -173,7 +174,7 @@ class FeatureEngineering:
         min_prc_rg = self.full_data['MinPriceRange']
         max_prc_rg = self.full_data['MaxPriceRange']
         shares_filed = self.full_data['SharesFiled']
-        
+
         exp_pro = shares_filed * mean_prc_rg
         exp_pro = exp_pro * disc_fact
         exp_pro_min = shares_filed * min_prc_rg
@@ -217,7 +218,9 @@ class FeatureEngineering:
         self.full_data.loc[vent_nan_idx, feature] = np.nan
         
         
-    def public_features(self, index_weight, port_days, adj_public_proxies):
+    def public_features(self, portfolio_division, portfolio_period, adj_public_proxies):
+        port_division = portfolio_division
+        self.port_division = port_division
         if adj_public_proxies == True:
             ipo_rets_data = pd.read_csv(input_path+'\\'+returns_file,
                                         usecols = ['date', 'NCUSIP', 'RETX'],
@@ -231,18 +234,14 @@ class FeatureEngineering:
             index_rets_data = pd.read_csv(input_path+'\\'+index_returns_file,
                                           parse_dates = ['DATE'],
                                           index_col = 'DATE')
-        
-            if index_weight == 'Equal':
-                index_rets = index_rets_data['ewretx']
-            else:
-                index_rets = index_rets_data['vwretx']
-                
+            index_rets = index_rets_data['ewretx']
+
             iter_count = 0
             progress = 100
             print('Public features construction started')
             port_data = self.prep_obj.port_data
             public_features = pd.DataFrame()
-            count_port_comps = []
+            sector_port_results = pd.DataFrame()
             for index, row in self.full_data.iterrows():
                 deal_num = row['DealNumber']
                 col_name = ['DealNumber']
@@ -250,8 +249,8 @@ class FeatureEngineering:
                 iter_count += 1
                 if iter_count % progress == 0:
                     print(f'Progress: {iter_count} items')
-                if port_days != None:
-                    dt_offset = pd.offsets.BusinessDay(port_days)
+                if portfolio_period != None:
+                    dt_offset = pd.offsets.BusinessDay(portfolio_period)
                     start_date = row['IssueDate'] - dt_offset
                     end_date = row['IssueDate']
                     port_period = pd.date_range(start = start_date,
@@ -282,21 +281,27 @@ class FeatureEngineering:
 # =========================
                 last_year = row['IssueDate'] - DateOffset(years=1)
                 last_month = row['IssueDate'] - DateOffset(months=1)
-                sector = row['FamaFrenchIndustry']
                 feature = ['SectorReturn']
-                valid_indus = self.prep_obj.valid_industries
+                division = row[port_division]
+                valid_ind = self.prep_obj.valid_industries
                 
-                if (pd.isnull(sector) == False)&\
-                (valid_indus[valid_indus.isin([sector])].empty == False):
-                    mask = (port_data['IssueDate'] >= last_year) &\
-                            (port_data['IssueDate'] <= last_month) &\
-                            (port_data['FamaFrenchIndustry'] == sector)
-                   
+                if pd.isnull(division) == False:
+                    if port_division == 'Industry':
+                        if valid_ind[valid_ind.isin([division])].empty == False:
+                            mask = (port_data['IssueDate'] >= last_year) &\
+                                    (port_data['IssueDate'] <= last_month) &\
+                                    (port_data[port_division] == division)
+                        else:
+                            public_features.loc[index, feature] = np.nan
+                    else:
+                        mask = (port_data['IssueDate'] >= last_year) &\
+                                (port_data['IssueDate'] <= last_month) &\
+                                (port_data[port_division] == division)
+                                
                     port_comp = port_data.loc[mask]
                     port_comp = port_comp['NCUSIP']
                     port_comp = port_comp.drop_duplicates()
-                    count_port_comps.append(len(port_comp))
-                    
+                
                     if port_comp.empty == False:
                         match_dt = port_period.join(ipo_rets, how = 'inner')
                         comp_ident = match_dt['NCUSIP'].isin(port_comp)
@@ -307,15 +312,20 @@ class FeatureEngineering:
                         sector_ret = 1/noa * sector_ret
                         sector_ret = sector_ret * self.scale
                         public_features.loc[index, feature] = sector_ret
+                        
+                        year = row['IssueDate'].strftime('%Y')
+                        sector_port_results.loc[index, 'PortfolioComponents'] = noa
+                        sector_port_results.loc[index, 'Division'] = division
+                        sector_port_results.loc[index, 'Year'] = year
                     else:
                         public_features.loc[index, feature] = np.nan
                 else:
                     public_features.loc[index, feature] = np.nan
-                
-            count_port_comps = pd.Series(count_port_comps)
-            count_port_comps.name = 'CountPortfolioComps'
-            count_port_comps.to_csv(output_path+'\\'+count_portfolio_cons, 
-                                    index = False)
+            
+            sector_port_file = sector_port_result_file
+            sector_port_file = f'{port_division}_{sector_port_file}'
+            sector_port_results.to_csv(output_path+'\\'+sector_port_file, 
+                                       index = False)
                     
             market_ret = public_features['MarketReturn']
             market_ret_slope = get_SlopeDummy(market_ret)
@@ -329,25 +339,28 @@ class FeatureEngineering:
             
             start_year = self.prep_obj.start_year
             end_year = self.prep_obj.end_year
-            file_name = public_feat_file
-            file_name = f'{start_year}_{end_year}_{file_name}'
-            public_features.to_csv(output_path+'\\'+file_name, index = False)
+            pub_measure_file = public_feat_file
+            pub_measure_file = f'{start_year}_{end_year}_{port_division}_{pub_measure_file}'
+            public_features.to_csv(output_path+'\\'+pub_measure_file, 
+                                   index = False)
             print('Public features construction finished')
 
         else:
             start_year = self.prep_obj.start_year
             end_year = self.prep_obj.end_year
-            file_name = public_feat_file
-            file_name = f'{start_year}_{end_year}_{file_name}'
-            public_features = pd.read_csv(output_path+'\\'+file_name)
-            count_port_comps = pd.read_csv(output_path+'\\'+count_portfolio_cons)
+            pub_measure_file = public_feat_file
+            pub_measure_file = f'{start_year}_{end_year}_{port_division}_{pub_measure_file}'
+            public_features = pd.read_csv(output_path+'\\'+pub_measure_file)
+            sector_port_file = sector_port_result_file
+            sector_port_file = f'{port_division}_{sector_port_file}'
+            sector_port_results = pd.read_csv(output_path+'\\'+sector_port_file)
         
         self.full_data = pd.merge(self.full_data,
                                   public_features,
                                   how = 'left',
                                   on = 'DealNumber')
         
-        self.count_portfolio_constituents = count_port_comps
+        self.sector_portfolio_results = sector_port_results
             
     def private_features(self, adj_prospectus_analysis):
         if adj_prospectus_analysis == True:    
