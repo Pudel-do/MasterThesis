@@ -291,6 +291,26 @@ class FeatureEngineering:
                             mask = (port_data['IssueDate'] >= last_year) &\
                                     (port_data['IssueDate'] <= last_month) &\
                                     (port_data[port_division] == division)
+                                    
+                            port_comp = port_data.loc[mask]
+                            port_comp = port_comp['NCUSIP']
+                            port_comp = port_comp.drop_duplicates()
+                            
+                            if port_comp.empty == False:
+                                match_dt = port_period.join(ipo_rets, how = 'inner')
+                                comp_ident = match_dt['NCUSIP'].isin(port_comp)
+                                comp_rets = match_dt.loc[comp_ident]
+                                
+                                noa = len(port_comp)
+                                sector_ret = comp_rets['RETX'].sum()
+                                sector_ret = 1/noa * sector_ret
+                                sector_ret = sector_ret * self.scale
+                                public_features.loc[index, feature] = sector_ret
+                                
+                                year = row['IssueDate'].strftime('%Y')
+                                sector_port_results.loc[index, 'PortfolioComponents'] = noa
+                                sector_port_results.loc[index, 'Division'] = division
+                                sector_port_results.loc[index, 'Year'] = year
                         else:
                             public_features.loc[index, feature] = np.nan
                     else:
@@ -298,27 +318,27 @@ class FeatureEngineering:
                                 (port_data['IssueDate'] <= last_month) &\
                                 (port_data[port_division] == division)
                                 
-                    port_comp = port_data.loc[mask]
-                    port_comp = port_comp['NCUSIP']
-                    port_comp = port_comp.drop_duplicates()
+                        port_comp = port_data.loc[mask]
+                        port_comp = port_comp['NCUSIP']
+                        port_comp = port_comp.drop_duplicates()
                 
-                    if port_comp.empty == False:
-                        match_dt = port_period.join(ipo_rets, how = 'inner')
-                        comp_ident = match_dt['NCUSIP'].isin(port_comp)
-                        comp_rets = match_dt.loc[comp_ident]
+                        if port_comp.empty == False:
+                            match_dt = port_period.join(ipo_rets, how = 'inner')
+                            comp_ident = match_dt['NCUSIP'].isin(port_comp)
+                            comp_rets = match_dt.loc[comp_ident]
                         
-                        noa = len(port_comp)
-                        sector_ret = comp_rets['RETX'].sum()
-                        sector_ret = 1/noa * sector_ret
-                        sector_ret = sector_ret * self.scale
-                        public_features.loc[index, feature] = sector_ret
+                            noa = len(port_comp)
+                            sector_ret = comp_rets['RETX'].sum()
+                            sector_ret = 1/noa * sector_ret
+                            sector_ret = sector_ret * self.scale
+                            public_features.loc[index, feature] = sector_ret
                         
-                        year = row['IssueDate'].strftime('%Y')
-                        sector_port_results.loc[index, 'PortfolioComponents'] = noa
-                        sector_port_results.loc[index, 'Division'] = division
-                        sector_port_results.loc[index, 'Year'] = year
-                    else:
-                        public_features.loc[index, feature] = np.nan
+                            year = row['IssueDate'].strftime('%Y')
+                            sector_port_results.loc[index, 'PortfolioComponents'] = noa
+                            sector_port_results.loc[index, 'Division'] = division
+                            sector_port_results.loc[index, 'Year'] = year
+                        else:
+                            public_features.loc[index, feature] = np.nan
                 else:
                     public_features.loc[index, feature] = np.nan
             
@@ -558,7 +578,7 @@ class FeatureEngineering:
             data = self.model_data[col]
             data = data.dropna()
             if plot_outliers == True:
-                plt.figure(figsize = (20,10))
+                plt.figure(figsize = figsize)
                 plt.subplot(121)
                 plt.hist(data, bins = 50)
                 plt.xlabel('Value', fontdict = xlabel_size)
@@ -652,7 +672,7 @@ class FeatureEngineering:
         for col in adj_outlier_cols:
             if plot_outliers == True:
                 data = self.model_data[col]
-                plt.figure(figsize = (20,10))
+                plt.figure(figsize = figsize)
                 plt.hist(data, bins = 50)
                 plt.xlabel('Value', fontdict = xlabel_size)
                 plt.ylabel('Frequency', fontdict = ylabel_size)
