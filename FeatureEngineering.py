@@ -26,6 +26,8 @@ model_cols = [
     'InitialReturn', 'InitialReturnAdjusted',
     'UnderwriterRank', 'TotalAssets', 'TechDummy', 
     'VentureDummy', 'AMEX', 'NASDQ', 'NYSE',
+    'ExpectedProceeds', 'ActualProceeds',
+    'SectorVolume', 'Volume',
     'MarketReturn', 'MarketReturnSlopeDummy',
     'SectorReturn', 'SectorReturnSlopeDummy',
     'PriceRevision', 'PriceRevisionSlopeDummy',
@@ -33,12 +35,8 @@ model_cols = [
     'PriceRevisionMaxSlopeDummy', 'PriceRevisionMinSlopeDummy',
     'WordsRevisionDummy', 'PositiveWordsRevision', 'NegativeWordsRevision',
     'SharesRevision', 'SharesRevisionSlopeDummy',
-    'ProceedsRevision', 'ProceedsRevisionSlopeDummy',
-    'ProceedsRevisionMaxDummy', 'ProceedsRevisionMinDummy',
-    'ProceedsRevisionMaxSlopeDummy', 'ProceedsRevisionMinSlopeDummy',
     'RegistrationDays', 'IssueDate',
     ]
-
 
 class FeatureEngineering:
     def __init__(self, prep_obj, scale_factor):
@@ -156,18 +154,25 @@ class FeatureEngineering:
 # =========================
         tech_id = 1
         non_tech_id = 0
-        sector = self.full_data['TechIndustry']
+        sector = self.prep_obj.port_data['TechIndustry']
         tech_dummy = np.where(sector == 'Non-Hitech',
                               non_tech_id,
                               tech_id)
-        nan_ident = pd.isnull(self.full_data['TechIndustry']) == True
-        tech_nan_idx = self.full_data.loc[nan_ident].index
-        self.full_data['TechDummy'] = tech_dummy
-        self.full_data.loc[tech_nan_idx, 'TechDummy'] = np.nan
+        nan_ident = pd.isnull(self.prep_obj.port_data['TechIndustry']) == True
+        tech_nan_idx = self.prep_obj.port_data.loc[nan_ident].index
+        self.prep_obj.port_data['TechDummy'] = tech_dummy
+        self.prep_obj.port_data.loc[tech_nan_idx, 'TechDummy'] = np.nan
+        
+        merge_cols = ['DealNumber', 'TechDummy']
+        self.full_data = pd.merge(self.full_data,
+                                  self.prep_obj.port_data[merge_cols],
+                                  how = 'left',
+                                  on = 'DealNumber')
 # =========================
         disc_fact = self.full_data['CPI_DiscountFactor']
         total_assets = self.full_data['TotalAssets']
         total_assets = total_assets * disc_fact
+        total_assets = np.log(total_assets)
         self.full_data['TotalAssets'] = total_assets
 # =========================
         mean_prc_rg = self.full_data['MeanPriceRange']
@@ -177,6 +182,8 @@ class FeatureEngineering:
 
         exp_pro = shares_filed * mean_prc_rg
         exp_pro = exp_pro * disc_fact
+        exp_pro = np.log(exp_pro)
+        
         exp_pro_min = shares_filed * min_prc_rg
         exp_pro_min = exp_pro_min * disc_fact
         exp_pro_max = shares_filed * max_prc_rg
@@ -185,6 +192,7 @@ class FeatureEngineering:
         shares_offered = self.full_data['SharesOfferedSumOfAllMkts']
         act_pro = shares_offered * offer_prc
         act_pro = act_pro * disc_fact
+        act_pro = np.log(act_pro)
         
         self.full_data['SharesOffered'] = shares_offered
         self.full_data['ExpectedProceeds'] = exp_pro
@@ -216,7 +224,6 @@ class FeatureEngineering:
         nan_ident = pd.isnull(self.full_data['VentureBacked']) == True
         vent_nan_idx = self.full_data.loc[nan_ident].index
         self.full_data.loc[vent_nan_idx, feature] = np.nan
-        
         
     def public_features(self, portfolio_division, portfolio_period, adj_public_proxies):
         port_division = portfolio_division
@@ -279,6 +286,29 @@ class FeatureEngineering:
                 feature = ['MarketReturn']
                 public_features.loc[index, feature] = index_ret
 # =========================
+                prior_weeks = row['IssueDate'] - DateOffset(weeks=6)
+                follow_weeks = row['IssueDate'] + DateOffset(weeks=2)
+                division = row['TechDummy']
+                
+                sector_ipo_mask = (port_data['IssueDate'] >= prior_weeks) &\
+                                  (port_data['IssueDate'] <= follow_weeks) &\
+                                  (port_data['TechDummy'] == division)     
+                sector_ipo_volume = port_data.loc[sector_ipo_mask]
+                sector_ipo_volume = sector_ipo_volume['NCUSIP']
+                sector_ipo_volume = sector_ipo_volume.drop_duplicates()
+                sector_ipo_volume = len(sector_ipo_volume)
+                feature = ['SectorVolume']
+                public_features.loc[index, feature] = sector_ipo_volume
+                
+                ipo_mask = (port_data['IssueDate'] >= prior_weeks) &\
+                           (port_data['IssueDate'] <= follow_weeks)
+                ipo_volume = port_data.loc[ipo_mask]
+                ipo_volume = ipo_volume['NCUSIP']
+                ipo_volume = ipo_volume.drop_duplicates()
+                ipo_volume = len(ipo_volume)
+                feature = ['Volume']
+                public_features.loc[index, feature] = ipo_volume
+# =========================
                 last_year = row['IssueDate'] - DateOffset(years=1)
                 last_month = row['IssueDate'] - DateOffset(months=1)
                 feature = ['SectorReturn']
@@ -288,11 +318,11 @@ class FeatureEngineering:
                 if pd.isnull(division) == False:
                     if port_division == 'Industry':
                         if valid_ind[valid_ind.isin([division])].empty == False:
-                            mask = (port_data['IssueDate'] >= last_year) &\
-                                    (port_data['IssueDate'] <= last_month) &\
-                                    (port_data[port_division] == division)
+                            port_mask = (port_data['IssueDate'] >= last_year) &\
+                                        (port_data['IssueDate'] <= last_month) &\
+                                        (port_data[port_division] == division)
                                     
-                            port_comp = port_data.loc[mask]
+                            port_comp = port_data.loc[port_mask]
                             port_comp = port_comp['NCUSIP']
                             port_comp = port_comp.drop_duplicates()
                             
@@ -314,14 +344,14 @@ class FeatureEngineering:
                         else:
                             public_features.loc[index, feature] = np.nan
                     else:
-                        mask = (port_data['IssueDate'] >= last_year) &\
-                                (port_data['IssueDate'] <= last_month) &\
-                                (port_data[port_division] == division)
+                        port_mask = (port_data['IssueDate'] >= last_year) &\
+                                    (port_data['IssueDate'] <= last_month) &\
+                                    (port_data[port_division] == division)
                                 
-                        port_comp = port_data.loc[mask]
+                        port_comp = port_data.loc[port_mask]
                         port_comp = port_comp['NCUSIP']
                         port_comp = port_comp.drop_duplicates()
-                
+
                         if port_comp.empty == False:
                             match_dt = port_period.join(ipo_rets, how = 'inner')
                             comp_ident = match_dt['NCUSIP'].isin(port_comp)
@@ -478,9 +508,9 @@ class FeatureEngineering:
         min_prc_rg = self.full_data['MinPriceRange']
         self.full_data['PriceRevision'] = prc_rev
         
-        shares_off = self.full_data['SharesOffered']
+        prim_shares_off = self.full_data['PrimaryShsOfrdSumOfAllMkts']
         shares_fil = self.full_data['SharesFiled']
-        shares_rev = (shares_off / shares_fil) -1
+        shares_rev = (prim_shares_off / shares_fil) -1
         shares_rev = shares_rev * self.scale
         self.full_data['SharesRevision'] = shares_rev
         
@@ -580,7 +610,7 @@ class FeatureEngineering:
             if plot_outliers == True:
                 plt.figure(figsize = figsize)
                 plt.subplot(121)
-                plt.hist(data, bins = 50)
+                plt.hist(data, bins = hist_bins)
                 plt.xlabel('Value', fontdict = xlabel_size)
                 plt.ylabel('Frequency', fontdict = ylabel_size)
                 plt.title(f'{col}', fontdict = title_size)
@@ -614,24 +644,22 @@ class FeatureEngineering:
         print(plot_desc_stat)
         print(cutting_line_thin)
         print(f'Number of observations: {nobs}')
-        print(cutting_line, '\n\n\n\n')
+        print(cutting_line, paragraph)
 # =========================
 # The entries in the array adj_whiskers display the the lower and 
 # upper tresholds to identify outliers. The order must refer to 
 # the same as in the list adj_outlier_cols
 
-        adj_outlier_cols = ['TotalAssets',
-                            'PriceRevision',
-                            'SharesRevision',
-                            'ProceedsRevision',
-                            'RegistrationDays']
+        adj_outlier_cols = [
+            'PriceRevision',
+            'SharesRevision',
+            'RegistrationDays'
+            ]
         
         adj_whiskers = np.array([
-            [-5942.31, 50000],
             [-230.22, 229.67],
-            [-230.22, 229.67],
-            [-313.33, 317.00],
-            [0, 1321.00] 
+            [-230.22, 200.00],
+            [0, 365.00] 
             ])
         
         adj_whisk_cols = ['AdjustedLowerWhisker', 
@@ -673,7 +701,7 @@ class FeatureEngineering:
             if plot_outliers == True:
                 data = self.model_data[col]
                 plt.figure(figsize = figsize)
-                plt.hist(data, bins = 50)
+                plt.hist(data, bins = hist_bins)
                 plt.xlabel('Value', fontdict = xlabel_size)
                 plt.ylabel('Frequency', fontdict = ylabel_size)
                 plt.title(f'{col} adjusted for outliers', 
@@ -696,7 +724,7 @@ class FeatureEngineering:
         print(cutting_line_thin)
         print(f'Number of observations after adjustments: {nobs_adj}')
         print(f'Number of removed outliers: {n_outliers}')
-        print(cutting_line, '\n\n')
+        print(cutting_line, paragraph)
        
             
             
