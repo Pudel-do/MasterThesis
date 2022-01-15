@@ -7,12 +7,16 @@ Created on Fri Jan 14 16:03:47 2022
 
 import pandas as pd
 import numpy as np
+import tensorflow as tf
+from tensorflow import keras 
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.model_selection import train_test_split, GridSearchCV
 from imblearn.over_sampling import RandomOverSampler, SMOTE
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import Lasso
 from GetData import *
+
+from sklearn.metrics import accuracy_score
 
 pred_cols = [
     'InitialReturn', 'InitialReturnAdjusted',
@@ -63,10 +67,11 @@ class PredictionModel:
 # =========================
         if adj_preprocessing == True:
             scaler = MinMaxScaler()
-            drop_chars = ['Dummy', 'NASDQ', 'AMEX', 'NYSE', 'Target']
+            drop_cols = ['Dummy', 'NASDQ', 'AMEX', 'NYSE', 'Target']
+            # drop_cols = ['Target']
             scale_cols = []
             for var in model_cols:
-                if not any(char in var for char in drop_chars):
+                if not any(char in var for char in drop_cols):
                     scale_cols.append(var)
 
             scaling = scaler.fit(model_data[scale_cols])
@@ -77,11 +82,16 @@ class PredictionModel:
             
             unscaled_data = model_data.drop(columns = scale_cols)
             model_data_adj = scaled_data.join(unscaled_data)
+            # model_data_adj = scaled_data
+            # model_data_adj['Target'] = unscaled_data['Target']
 # =========================
             sample_strat = 1
-            sampler = RandomOverSampler(sampling_strategy = sample_strat)
             feat_treshold = 0.01
-            
+            rand_stat = None
+            selector = RandomForestClassifier(n_estimators = 500)
+            sampler = RandomOverSampler(sampling_strategy = sample_strat, 
+                                        random_state = rand_stat)
+
             target = model_data_adj['Target']
             regressors = model_data_adj.drop(columns = 'Target')
             model_set = {}
@@ -89,7 +99,8 @@ class PredictionModel:
             for i in range(5):
                 x_train, x_test, y_train, y_test = train_test_split(regressors, 
                                                                     target, 
-                                                                    test_size=0.25)
+                                                                    test_size=0.25,
+                                                                    random_state = rand_stat)
                 
                 x_train, y_train = sampler.fit_resample(x_train, y_train)
                 y_train_dist = y_train.value_counts(normalize=True)
@@ -97,12 +108,11 @@ class PredictionModel:
                                 
                 if i == 0:
                     if use_feature_selection == True:
-                        rnd_clf = RandomForestClassifier(n_estimators = 500)
-                        rnd_clf.fit(x_train, y_train)
-                        feat_weights = rnd_clf.feature_importances_
+                        selector.fit(x_train, y_train)
+                        feat_weights = selector.feature_importances_
                         feat_weights = pd.Series(feat_weights)
                         feat_weights.index = x_train.columns
-                        features = feat_weights.where(feat_weights>=feat_treshold)
+                        features = feat_weights.where(feat_weights>feat_treshold)
                         features = features.dropna()
                         features = features.index.to_list()
                     else:
@@ -127,7 +137,36 @@ class PredictionModel:
             self.model_set = model_set
             self.test_sets = test_sets
 
-
-                
+    def model_construction(self, adj_model_training):
+        if adj_model_training == True:
+            model_data = self.model_set
+            x_train = model_data['x_train']
+            y_train = model_data['y_train']
+            input_shape = x_train.shape[1]
             
+            model = keras.models.Sequential([
+                keras.layers.Flatten(input_shape = [input_shape]),
+                keras.layers.Dense(300, activation = 'relu'),
+                keras.layers.Dense(100, activation = 'relu'),
+                keras.layers.Dense(1, activation = 'sigmoid')
+                ])
+            
+            model.compile(loss='binary_crossentropy',
+                          optimizer='sgd',
+                          metrics=['accuracy'])
+            
+            history = model.fit(x_train, y_train, epochs = 30)
+            
+        x_test = model_data['x_test']
+        y_test = model_data['y_test']
+        model.evaluate(x_test, y_test)
+        
+        y_pred = model.predict_classes(x_test)
+        score = accuracy_score(y_test, y_pred)
+        self.y_pred = y_pred
+
+        
+        
+        
+        
         
