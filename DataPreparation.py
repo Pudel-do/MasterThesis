@@ -121,20 +121,21 @@ class DataPreparation:
             col_adj = re.sub('[^a-zA-Z]+', '', column)
             fama_french_industries[col_adj] = industries
         
-        col_name = 'FamaFrenchIndustry'
+        col_industry = 'Industry'
         for index, row in self.port_data.iterrows():
-            sic_code = row['MainSICCode']
-            if (pd.isnull(sic_code) == False)&\
-            (sic_code.isdecimal() == True):                
+            industry_id = row['MainSICCode']
+            if (pd.isnull(industry_id) == False)&\
+            (industry_id.isdecimal() == True):                
                 for key, value in fama_french_industries.items():
-                    sic_code = int(sic_code)
-                    if sic_code in value:
-                        self.port_data.loc[index, col_name] = key         
+                    industry_id = int(industry_id)
+                    if industry_id in value:
+                        self.port_data.loc[index, col_industry] = key         
             else:
-                self.port_data.loc[index, col_name] = np.nan
+                self.port_data.loc[index, col_industry] = np.nan
+
         
         treshold = industry_treshold
-        indu_dist = self.port_data[col_name]
+        indu_dist = self.port_data[col_industry]
         indu_dist = indu_dist.value_counts(normalize=True)
         indu_dist_adj = indu_dist.where(indu_dist >= treshold)
         indu_dist_adj = indu_dist_adj.dropna()
@@ -143,9 +144,9 @@ class DataPreparation:
         self.industry_dist = indu_dist
         self.industry_dist_adj = indu_dist_adj
         self.valid_industries = valid_industries
-        self.base = self.base.join(self.port_data[col_name])
+        self.base = self.base.join(self.port_data[col_industry])
     
-    def extended_preprocessing(self, adj_uw_matching):
+    def extended_preprocessing(self, adj_underwriter_matching):
         mean_prc_rg = np.where(pd.isnull(self.base['OriginalMiddleOfFilingPriceRange']) == True,
                                          self.base['AmendedMiddleOfFilingPrice'],
                                          self.base['OriginalMiddleOfFilingPriceRange'])
@@ -204,7 +205,7 @@ class DataPreparation:
         cols = ['DealNumber', 'LeadManagersLongName']
         sdc_uwriter = self.base[cols]
         match_results = pd.DataFrame()
-        if adj_uw_matching == True:
+        if adj_underwriter_matching == True:
             iter_count = 0
             progress = 100
             print('Underwriter matching started')
