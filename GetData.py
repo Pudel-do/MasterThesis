@@ -10,6 +10,8 @@ import numpy as np
 import pickle
 import os
 import warnings
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.svm import SVC
 warnings.filterwarnings("ignore")
 
 exit_message = 'Download of CRSP data for quotes and returns necessary due to time period adjustments'
@@ -19,6 +21,7 @@ output_path = r'C:\Users\Matthias Pudel\OneDrive\Studium\Master\Master Thesis\Em
 prep_obj_file = 'DataPreparation.pkl'
 feat_eng_obj_file = 'FeatureEngineering.pkl'
 reg_obj_file = 'Regression.pkl'
+pred_obj_file = 'PredictionModel.pkl'
 uw_matching_file = 'UnderwriterMatchResults.csv'
 public_feat_file = 'PublicFeatures.csv'
 ols_result_file = 'RegressionResult_OLS.csv'
@@ -31,7 +34,11 @@ fmb_aggresult_file = 'AggregatedRegressionResult_FMB.csv'
 fmb_aggkeyfig_file = 'AggregatedKeyFigures_FMB.csv'
 prosp_result_file = 'TextAnalysisResults.csv'
 master_dict_log_file = 'MasterDictionaryLogFile.txt'
-count_portfolio_cons = 'SectorPortfolioCountConstituents.csv'
+sector_port_result_file = 'SectorPortfolioResults.csv'
+pred_model_set_file = 'PredictionModelSet.pkl'
+pred_test_sets_file = 'PredictionTestSets.pkl'
+trained_neural_network_file = 'TrainedNeuralNetwork.h5'
+trained_benchmark_file = 'TrainedBenchmarkModel.pkl'
 
 
 input_path = r'C:\Users\Matthias Pudel\OneDrive\Studium\Master\Master Thesis\Empirical Evidence\Input Data'
@@ -46,6 +53,28 @@ index_returns_file = 'CRSP_Market_Returns.csv'
 prosp_merge_file = '100_IPO_data_merged_by_DealNumber_without_any_exclusions.csv'
 master_dict_file = 'LoughranMcDonald_MasterDictionary_2020.csv'
 industry_dummies_file = 'FamaFrenchIndustryDummies.xlsx'
+
+
+benchmark_param_grids = {
+    'RandomForest': [
+        {'n_estimators': [50, 100, 150, 200],
+         'max_features': [4, 6, 8, 15]},
+        {'bootstrap': [False],
+         'n_estimators': [100, 200],
+         'max_features': [6, 15]},
+         ],
+    'SVC': [
+        {'kernel': ('sigmoid', 'rbf','poly'),
+         'C':[1.5, 10]},
+        {'kernel': ('sigmoid', 'poly'),
+         'C':[1, 4, 8]},
+         ],
+    }
+
+benchmark_classifier = {
+    'RandomForest': RandomForestClassifier(),
+    'SVC': SVC()
+    }
 
 
 def save_obj(obj, path, filename):
