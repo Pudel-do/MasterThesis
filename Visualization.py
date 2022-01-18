@@ -11,9 +11,13 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
 import statsmodels.stats.weightstats as smw
+from sklearn.metrics import classification_report
+from sklearn.metrics import roc_curve
+from sklearn.metrics import roc_auc_score
 from tabulate import tabulate 
 import re 
 from re import search
+
 
 output_path_results = r'C:\Users\Matthias Pudel\OneDrive\Studium\Master\Master Thesis\Empirical Evidence\Results'
 
@@ -21,12 +25,86 @@ figsize = (25,10)
 xlabel_size = {'fontsize' : 15}
 ylabel_size = {'fontsize' : 15}
 suptitle_size = 25
-title_size = {'fontsize' : 20}
-legend_size = {'size': 20}
+title_size = {'fontsize' : 25}
+legend_size = 'xx-large'
 hist_bins = 100
 cutting_line = 135*'='
 cutting_line_thin = 135*'-'
 paragraph = '\n\n\n\n'
+
+def Performance_PredictionModel(obj, plot_prediction_performance):
+    raw_data = obj.model_raw_data
+    target_col = obj.target_ret_col
+    model_pred = obj.model_prediction
+    benchmark = obj.benchmark
+    benchmark_pred = obj.benchmark_prediction
+    
+    models = ['NeuralNetwork', benchmark]
+    for model in models:
+        if model == 'NeuralNetwork':
+            pred_data = model_pred
+        else:
+            pred_data = benchmark_pred
+            
+        y_true = pred_data['Target']
+        y_pred = pred_data['Prediction']
+        report = classification_report(y_true, y_pred)
+        
+        print(cutting_line)
+        print(f'Test set performance of {model} model')
+        print(cutting_line)
+        print(report)
+        print(cutting_line, paragraph)
+
+    returns = raw_data[target_col]
+    prediction = model_pred['Prediction']
+    port_comps = prediction.where(prediction==1)
+    port_comps = port_comps.dropna()
+    n_port_comps = len(port_comps)
+    port_rets = returns.loc[port_comps.index]
+    port_ret = port_rets.mean()
+    port_std = port_rets.std()
+    
+    benchmark_rets = pd.Series([])
+    benchmark_stds = pd.Series([])
+    sample_number = 100
+    for i in range(sample_number):
+        bench_comps = model_pred.sample(n = n_port_comps)
+        bench_rets = returns.loc[bench_comps.index]
+        bench_ret = bench_rets.mean()
+        bench_std = bench_rets.std()
+        benchmark_rets.loc[i] = bench_ret
+        benchmark_stds.loc[i] = bench_std
+        
+    benchmark_ret = benchmark_rets.mean()
+    benchmark_std = benchmark_stds.mean()
+    
+    cols = ['Portfolio', 'Benchmark']
+    idx = ['Return', 'StandardDeviation']
+    result = pd.DataFrame(columns = cols,
+                          index = idx)
+    result.loc[idx[0], cols[0]] = port_ret
+    result.loc[idx[1], cols[0]] = port_std
+    result.loc[idx[0], cols[1]] = benchmark_ret
+    result.loc[idx[1], cols[1]] = benchmark_std
+    result = result.astype(float)
+    
+    plot_result = tabulate(result,
+                           headers = 'keys',
+                           floatfmt = '.2f',
+                           tablefmt = 'simple',
+                           numalign = 'center',
+                           showindex = True)
+    
+    print(cutting_line)
+    print(f'Portfolio performance of predicted and randomly selected IPOs')
+    print(cutting_line, '\n')
+    print(plot_result)
+    print(cutting_line_thin)
+    print(f'Number of portfolio components: {n_port_comps}')
+    print(f'Number of samples for benchmark construction: {sample_number}')
+    print(cutting_line, paragraph)
+    
 
 def Analysis_SectorPortfolio(obj, plot_sectorportfolio):
     data = obj.sector_portfolio_results
