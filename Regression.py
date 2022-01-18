@@ -11,6 +11,8 @@ import statsmodels.api as sm
 import statsmodels.stats.weightstats as smw
 import sys
 from GetData import *
+import warnings
+# warnings.filterwarnings("ignore")
 
 class Regression:
     def __init__(self, feat_eng_obj, start_year, end_year):
@@ -18,23 +20,27 @@ class Regression:
         self.model_data = feat_eng_obj.model_data
         self.start_year = start_year
         self.end_year = end_year
+        self.reg_model_cols = feat_eng_obj.model_cols
         
-    def preprocessing(self, reg_cols):
+    def preprocessing(self, reg_vars):
         base = self.model_data
+        base = base[reg_vars]
         base = base.dropna()
+        base = base.join(self.model_data['IssueDate'])
 
         issue_year = base['IssueDate']
         issue_year = issue_year.dt.strftime('%Y')
         base['IssueYear'] = issue_year
         self.base = base
-        
+        self.reg_vars = reg_vars
+
         endog_var = 'InitialReturn'
-        exog_var = reg_cols.copy()
+        exog_var = reg_vars.copy()
         exog_var.remove('InitialReturn')
         self.endog_var = endog_var
         self.exog_var = exog_var
         
-        key_figures = ['RSquared', 'Count']
+        key_figures = ['AdjRSquared', 'SampleSize']
         key_col = 'Value'
         self.key_figures = key_figures
         self.key_col = key_col
@@ -49,7 +55,7 @@ class Regression:
         ols_reg = ols_reg.fit(cov_type='HC0')
         
         coefs = ols_reg.params
-        coefs.name = 'Coeff'
+        coefs.name = 'Coefficient'
         coefs = pd.DataFrame(coefs)
         pvalues = ols_reg.pvalues
         pvalues.name = 'pvalue'
@@ -60,8 +66,8 @@ class Regression:
 # Dataframe key_figs can be extended 
 # by furter key figures at this point
         keyfig = pd.DataFrame()
-        keyfig.loc['RSquared', self.key_col] = r_sqr
-        keyfig.loc['Count', self.key_col] = n_obs
+        keyfig.loc['AdjRSquared', self.key_col] = r_sqr
+        keyfig.loc['SampleSize', self.key_col] = n_obs
         result = coefs.join(pvalues)
         full_result = ols_reg.summary()
         
@@ -105,11 +111,11 @@ class Regression:
 # =========================
 # Dataframe key_figs can be extended 
 # by furter key figures at this point            
-            key_fig.loc['RSquared', value] = r_sqr
-            key_fig.loc['Count', value] = nobs
+            key_fig.loc['AdjRSquared', value] = r_sqr
+            key_fig.loc['SampleSize', value] = nobs
             
         avg_coefs = coefs.mean(axis = 1)
-        avg_coefs.name = 'Coeff'
+        avg_coefs.name = 'Coefficient'
         avg_coefs = pd.DataFrame(avg_coefs)
         avg_pvalues = pvalues.mean(axis = 1)
         avg_pvalues.name = 'pvalue'
@@ -126,7 +132,7 @@ class Regression:
         self.fmb_result = avg_result
         self.fmb_keyfig = avg_keyfig
         
-    def build_results(self, adj_reg_cols, clean_file):
+    def build_results(self, adj_regressors, clean_file):
         start_year = self.start_year
         end_year = self.end_year
         index_col = 'Unnamed: 0'
@@ -136,9 +142,9 @@ class Regression:
         fmb_result = self.fmb_result
         fmb_keyfig = self.fmb_keyfig
 
-        cols_ols = {'Coeff': 'Coeff_OLS',
+        cols_ols = {'Coefficient': 'Coefficient_OLS',
                     'pvalue': 'pvalue_OLS'}
-        cols_fmb = {'Coeff': 'Coeff_FMB',
+        cols_fmb = {'Coefficient': 'Coefficient_FMB',
                     'pvalue': 'pvalue_FMB'}
         ols_res_adj = ols_result.rename(columns=cols_ols)
         fmb_res_adj = fmb_result.rename(columns=cols_fmb)
@@ -150,7 +156,7 @@ class Regression:
         fmb_keyfig_adj = fmb_keyfig.rename(columns=cols_fmb)
         keyfig_result = ols_keyfig_adj.join(fmb_keyfig_adj) 
         
-        self.reg_result = reg_result
+        self.regression_result = reg_result
         self.keyfig_result = keyfig_result
 # =========================    
         file_ols = ols_aggresult_file
@@ -162,7 +168,7 @@ class Regression:
         file_fmb_keyfig = fmb_aggkeyfig_file
         file_fmb_keyfig = f'{start_year}_{end_year}_{file_fmb_keyfig}'
         
-        if adj_reg_cols == True:
+        if adj_regressors == True:
             ols_aggres = pd.read_csv(output_path+'\\'+file_ols, index_col=index_col)
             ols_aggres = pd.concat([ols_aggres, ols_result], axis=1)
             ols_aggres.to_csv(output_path+'\\'+file_ols)
@@ -190,6 +196,13 @@ class Regression:
             fmb_aggres = fmb_aggres.iloc[: , 1:]
             fmb_aggkey = pd.read_csv(output_path+'\\'+file_fmb_keyfig, index_col=index_col)
             fmb_aggkey = fmb_aggkey.iloc[: , 1:]
+            
+            adj_df_cols = [ols_aggres, ols_aggkey, fmb_aggres, fmb_aggkey]       
+            for df in adj_df_cols:
+                cols = pd.Series(df.columns)
+                cols = cols.str.replace('.1', ' ')
+                new_cols = cols.to_list()
+                df.columns = new_cols
             
             self.ols_result_agg = ols_aggres
             self.ols_keyfig_agg = ols_aggkey
