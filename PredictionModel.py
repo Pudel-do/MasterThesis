@@ -8,8 +8,8 @@ Created on Fri Jan 14 16:03:47 2022
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-# import tensorflow as tf
-# from tensorflow import keras 
+import tensorflow as tf
+from tensorflow import keras 
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.model_selection import train_test_split, GridSearchCV
 from imblearn.over_sampling import RandomOverSampler, SMOTE
@@ -18,19 +18,20 @@ from sklearn.linear_model import Lasso
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import recall_score
 from sklearn.metrics import precision_score
+from contextlib import redirect_stdout
 from GetData import *
 from Visualization import *
 
 pred_cols = [
     'InitialReturn', 'InitialReturnAdjusted',
     'UnderwriterRank', 'TotalAssets', 
-    'TechDummy', 'VentureDummy', 
-    'AMEX', 'NASDQ', 'NYSE',
+    # 'TechDummy', 'VentureDummy', 
+    # 'AMEX', 'NASDQ', 'NYSE',
     'ExpectedProceeds', 'ActualProceeds',
     'SectorVolume', 'Volume',
     'MarketReturn', 'SectorReturn',
     'PriceRevision', 'RegistrationDays',
-    'PriceRevisionMaxDummy', 'PriceRevisionMinDummy',
+    # 'PriceRevisionMaxDummy', 'PriceRevisionMinDummy',
     'PositiveWordsRevision', 'NegativeWordsRevision',
     'SharesRevision', 
     ]
@@ -103,7 +104,7 @@ class PredictionModel:
             for i in range(self.n_sub_testset+1):
                 x_train, x_test, y_train, y_test = train_test_split(regressors, 
                                                                     target, 
-                                                                    test_size=0.15,
+                                                                    test_size=0.10,
                                                                     random_state = rand_stat)
                 
                 x_train, x_valid, y_train, y_valid = train_test_split(x_train, y_train, 
@@ -170,8 +171,11 @@ class PredictionModel:
                 keras.layers.Dense(1, activation = 'sigmoid')
                 ])
             
-            early_stopping = keras.callbacks.EarlyStopping(patience=30,
+            early_stopping = keras.callbacks.EarlyStopping(patience=20,
                                                            restore_best_weights=True)
+            
+            # check_point = keras.callbacks.ModelCheckpoint(output_path+'\\'+trained_neural_network_file,
+            #                                               save_best_only=True)
             
             model.compile(loss='binary_crossentropy',
                           optimizer='sgd',
@@ -223,7 +227,15 @@ class PredictionModel:
         sub_test_sets = self.test_sets
         x_test = model_set['x_test']
         y_test = model_set['y_test']
+        
         model = keras.models.load_model(output_path+'\\'+trained_neural_network_file)
+        with open(output_path+'\\'+neural_network_summary_file, 'w') as f:
+            with redirect_stdout(f):
+                model.summary()
+                
+        model_summary = open(output_path+'\\'+neural_network_summary_file, 'r')
+        model_summary = model_summary.read()
+        
         benchmark_file = trained_benchmark_file
         benchmark_file = f'{self.benchmark}_{benchmark_file}'
         benchmark_model = get_object(output_path, benchmark_file)
@@ -243,6 +255,7 @@ class PredictionModel:
         y_pred_bench.index = y_test.index
         benchmark_prediction = pd.concat([y_test, y_pred_bench], axis=1)
         
+        self.model_summary = model_summary
         self.model_prediction = model_prediction
         self.benchmark_model = benchmark_model
         self.benchmark_prediction = benchmark_prediction
