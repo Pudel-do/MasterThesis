@@ -8,11 +8,11 @@ Created on Fri Jan 14 16:03:47 2022
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import tensorflow as tf
-from tensorflow import keras 
+# import tensorflow as tf
+# from tensorflow import keras 
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.model_selection import train_test_split, GridSearchCV
-from imblearn.over_sampling import RandomOverSampler, SMOTE
+from imblearn.over_sampling import RandomOverSampler, SMOTE, BorderlineSMOTE, SMOTENC
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import Lasso
 from sklearn.metrics import accuracy_score
@@ -25,15 +25,22 @@ from Visualization import *
 pred_cols = [
     'InitialReturn', 'InitialReturnAdjusted',
     'UnderwriterRank', 'TotalAssets', 
-    # 'TechDummy', 'VentureDummy', 
-    # 'AMEX', 'NASDQ', 'NYSE',
+    'TechDummy', 'VentureDummy', 
+    'AMEX', 'NASDQ', 'NYSE',
     'ExpectedProceeds', 'ActualProceeds',
     'SectorVolume', 'Volume',
     'MarketReturn', 'SectorReturn',
     'PriceRevision', 'RegistrationDays',
-    # 'PriceRevisionMaxDummy', 'PriceRevisionMinDummy',
+    'PriceRevisionMaxDummy', 'PriceRevisionMinDummy',
     'PositiveWordsRevision', 'NegativeWordsRevision',
     'SharesRevision', 
+    ]
+
+dummy_cols = [
+    'TechDummy', 'VentureDummy', 
+    'AMEX', 'NASDQ', 'NYSE',
+    'PriceRevisionMaxDummy', 
+    'PriceRevisionMinDummy'
     ]
 
 class PredictionModel:
@@ -42,9 +49,9 @@ class PredictionModel:
         self.model_raw_data = reg_obj.model_data
         self.start_year = start_year
         self.end_year = end_year
-        self.n_sub_testset = 5
+        self.n_sub_testset = 2
         
-    def preprocessing(self, target_return, adj_preprocessing, use_feature_selection):
+    def preprocessing(self, target_return, adj_preprocessing, use_dummy_variables, use_feature_selection):
         start_year = self.start_year
         end_year = self.end_year
         model_obj_file = f'{start_year}_{end_year}_{pred_model_set_file}'
@@ -75,30 +82,62 @@ class PredictionModel:
 # =========================
         if adj_preprocessing == True:
             scaler = StandardScaler()
-            unscale_cols = ['Dummy', 'NASDQ', 'AMEX', 'NYSE', 'Target']
-            scale_cols = []
-            for var in model_cols:
-                if not any(char in var for char in unscale_cols):
-                    scale_cols.append(var)
+            unscaled_cols = dummy_cols.copy()
+            unscaled_cols.append('Target')
+            scaled_cols = []
+            for col in model_cols:
+                if not any(char in col for char in unscaled_cols):
+                   scaled_cols.append(col) 
 
-            scaling = scaler.fit(model_data[scale_cols])
-            scaled_data = scaling.transform(model_data[scale_cols])
+            scaling = scaler.fit(model_data[scaled_cols])
+            scaled_data = scaling.transform(model_data[scaled_cols])
             scaled_data = pd.DataFrame(scaled_data,
                                        index = model_data.index,
-                                       columns = scale_cols)
+                                       columns = scaled_cols)
             
-            unscaled_data = model_data.drop(columns = scale_cols)
+            unscaled_data = model_data.drop(columns = scaled_cols)
             model_data_adj = scaled_data.join(unscaled_data)
+            if use_dummy_variables == False:
+                model_data_adj = model_data_adj.drop(columns = dummy_cols)
 # =========================
-            sample_strat = 1
-            feat_treshold = 0.01
-            rand_stat = None
-            selector = RandomForestClassifier(n_estimators = 500)
-            sampler = RandomOverSampler(sampling_strategy = sample_strat, 
-                                        random_state = rand_stat)
-
             target = model_data_adj['Target']
             regressors = model_data_adj.drop(columns = 'Target')
+            sample_strat = 1
+            feat_treshold = 0.01
+            feat_iterations = 2
+            rand_stat = None
+            selector = RandomForestClassifier(n_estimators = 500)
+            if use_dummy_variables == False:
+                sampler = SMOTE(sampling_strategy = sample_strat,
+                                 random_state = rand_stat)
+            else:
+                dummy_idx = regressors.columns.get_indexer(dummy_cols)
+                sampler = SMOTENC(sampling_strategy = sample_strat,
+                                  categorical_features = dummy_idx,
+                                  random_state = rand_stat)
+            
+            if use_feature_selection == True:
+                feat_weights = pd.DataFrame(index = regressors.columns)
+                for i in range(feat_iterations):
+                    x_train, x_test, y_train, y_test = train_test_split(regressors, 
+                                                                        target, 
+                                                                        test_size=0.2,
+                                                                        random_state = rand_stat)
+                    
+                    selector.fit(x_train, y_train)
+                    feat_weight = selector.feature_importances_
+                    feat_weight = pd.DataFrame(feat_weight)
+                    feat_weight.index = x_train.columns
+                    feat_weight.columns = [i]
+                    feat_weights = feat_weights.join(feat_weight)
+                    
+                feat_weights_result = feat_weights.mean(axis=1)
+                features = feat_weights_result.where(feat_weights_result>feat_treshold)
+                features = features.dropna()
+                features = features.index.to_list()
+            else:
+                features = regressors.columns.to_list()
+
             model_set = {}
             test_sets = {}
             for i in range(self.n_sub_testset+1):
@@ -117,28 +156,14 @@ class PredictionModel:
                 y_valid_dist = y_valid.value_counts(normalize=True)
                 self.y_train_dist = y_train_dist
                 self.y_valid_dist = y_valid_dist
-                                
+                
                 if i == 0:
-                    if use_feature_selection == True:
-                        selector.fit(x_train, y_train)
-                        feat_weights = selector.feature_importances_
-                        feat_weights = pd.Series(feat_weights)
-                        feat_weights.index = x_train.columns
-                        feat_weights = feat_weights.sort_values(ascending = False)
-                        features = feat_weights.where(feat_weights>feat_treshold)
-                        features = features.dropna()
-                        features = features.index.to_list()
-                        self.feature_weights = feat_weights
-                    else:
-                        features = x_train.columns.to_list()
-                        
                     model_set['x_test'] = x_test[features]
                     model_set['y_test'] = y_test
                     model_set['x_train'] = x_train[features]
                     model_set['y_train'] = y_train
                     model_set['x_valid'] = x_valid[features]
                     model_set['y_valid'] = y_valid
-                    
                 else:
                     test_sets[f'x_test_{i}'] = x_test[features]
                     test_sets[f'y_test_{i}'] = y_test
