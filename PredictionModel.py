@@ -31,25 +31,35 @@ pred_cols = [
     'SectorVolume', 'Volume',
     'MarketReturn', 'SectorReturn',
     'PriceRevision', 'RegistrationDays',
-    'PriceRevisionMaxDummy', 'PriceRevisionMinDummy',
-    'PositiveWordsRevision', 'NegativeWordsRevision',
+    'InitialProspectusPositive',
+    'InitialProspectusNegative',
+    'InitialProspectusUncertain',
+    'InitialProspectusLitigious',
+    'InitialProspectusStrongModal',
+    'InitialProspectusWeakModal',
+    'InitialProspectusConstraining',
+    'FinalProspectusPositive',
+    'FinalProspectusNegative',
+    'FinalProspectusUncertain',
+    'FinalProspectusLitigious',
+    'FinalProspectusStrongModal',
+    'FinalProspectusWeakModal',
+    'FinalProspectusConstraining',
     'SharesRevision', 
     ]
 
 dummy_cols = [
     'TechDummy', 'VentureDummy', 
     'AMEX', 'NASDQ', 'NYSE',
-    'PriceRevisionMaxDummy', 
-    'PriceRevisionMinDummy'
     ]
 
 class PredictionModel:
-    def __init__(self, reg_obj, start_year, end_year):
-        self.reg_obj = reg_obj
-        self.model_raw_data = reg_obj.model_data
+    def __init__(self, feat_eng_obj, start_year, end_year):
+        self.obj = feat_eng_obj
+        self.model_raw_data = feat_eng_obj.full_data
         self.start_year = start_year
         self.end_year = end_year
-        self.n_sub_testset = 2
+        self.n_sub_test_set = 2
         
     def preprocessing(self, target_return, adj_preprocessing, use_dummy_variables, use_feature_selection):
         start_year = self.start_year
@@ -57,19 +67,20 @@ class PredictionModel:
         model_obj_file = f'{start_year}_{end_year}_{pred_model_set_file}'
         test_sets_obj_file = f'{start_year}_{end_year}_{pred_test_sets_file}'
         
-        model_data = self.model_raw_data[pred_cols]
-        model_data = model_data.dropna()
+        pred_data = self.model_raw_data[pred_cols]
+        pred_data = pred_data.loc[self.obj.model_data.index]
+        pred_data = pred_data.dropna()
         
         rets_cols = ['InitialReturn', 'InitialReturnAdjusted']
-        returns = model_data[rets_cols]
+        returns = pred_data[rets_cols]
         target_rets = np.where(returns >= target_return,1,0)
         target_rets = pd.DataFrame(target_rets,
                                    index = returns.index,
                                    columns = rets_cols)
 
         target_ret_col = 'InitialReturnAdjusted'
-        model_data['Target'] = target_rets[target_ret_col]
-        model_data = model_data.drop(columns = rets_cols)
+        pred_data['Target'] = target_rets[target_ret_col]
+        pred_data = pred_data.drop(columns = rets_cols)
         model_cols = pred_cols.copy()
         model_cols.remove('InitialReturn')
         model_cols.remove('InitialReturnAdjusted')
@@ -77,7 +88,7 @@ class PredictionModel:
         
         self.target_ret_col = target_ret_col
         self.target_rets = target_rets
-        self.model_data = model_data
+        self.pred_data = pred_data
         self.model_cols = model_cols
 # =========================
         if adj_preprocessing == True:
@@ -89,22 +100,22 @@ class PredictionModel:
                 if not any(char in col for char in unscaled_cols):
                    scaled_cols.append(col) 
 
-            scaling = scaler.fit(model_data[scaled_cols])
-            scaled_data = scaling.transform(model_data[scaled_cols])
+            scaling = scaler.fit(pred_data[scaled_cols])
+            scaled_data = scaling.transform(pred_data[scaled_cols])
             scaled_data = pd.DataFrame(scaled_data,
-                                       index = model_data.index,
+                                       index = pred_data.index,
                                        columns = scaled_cols)
             
-            unscaled_data = model_data.drop(columns = scaled_cols)
-            model_data_adj = scaled_data.join(unscaled_data)
+            unscaled_data = pred_data.drop(columns = scaled_cols)
+            pred_data_adj = scaled_data.join(unscaled_data)
             if use_dummy_variables == False:
-                model_data_adj = model_data_adj.drop(columns = dummy_cols)
+                pred_data_adj = pred_data_adj.drop(columns = dummy_cols)
 # =========================
-            target = model_data_adj['Target']
-            regressors = model_data_adj.drop(columns = 'Target')
+            target = pred_data_adj['Target']
+            regressors = pred_data_adj.drop(columns = 'Target')
             sample_strat = 1
             feat_treshold = 0.01
-            feat_iterations = 2
+            feat_select_iterations = 5
             rand_stat = None
             selector = RandomForestClassifier(n_estimators = 500)
             if use_dummy_variables == False:
@@ -118,12 +129,13 @@ class PredictionModel:
             
             if use_feature_selection == True:
                 feat_weights = pd.DataFrame(index = regressors.columns)
-                for i in range(feat_iterations):
+                for i in range(feat_select_iterations):
                     x_train, x_test, y_train, y_test = train_test_split(regressors, 
                                                                         target, 
                                                                         test_size=0.2,
                                                                         random_state = rand_stat)
                     
+                    x_train, y_train = sampler.fit_resample(x_train, y_train)
                     selector.fit(x_train, y_train)
                     feat_weight = selector.feature_importances_
                     feat_weight = pd.DataFrame(feat_weight)
@@ -137,10 +149,11 @@ class PredictionModel:
                 features = features.index.to_list()
             else:
                 features = regressors.columns.to_list()
-
+            
+            self.features = features
             model_set = {}
-            test_sets = {}
-            for i in range(self.n_sub_testset+1):
+            sub_test_set = {}
+            for i in range(self.n_sub_test_set+1):
                 x_train, x_test, y_train, y_test = train_test_split(regressors, 
                                                                     target, 
                                                                     test_size=0.10,
@@ -159,25 +172,27 @@ class PredictionModel:
                 
                 if i == 0:
                     model_set['x_test'] = x_test[features]
-                    model_set['y_test'] = y_test
                     model_set['x_train'] = x_train[features]
-                    model_set['y_train'] = y_train
                     model_set['x_valid'] = x_valid[features]
+                    model_set['y_test'] = y_test
+                    model_set['y_train'] = y_train
                     model_set['y_valid'] = y_valid
                 else:
-                    test_sets[f'x_test_{i}'] = x_test[features]
-                    test_sets[f'y_test_{i}'] = y_test
+                    sub_test_set[f'x_test_{i}'] = x_test[features]
+                    sub_test_set[f'y_test_{i}'] = y_test
                 
 
             save_obj(model_set, output_path, model_obj_file)
-            save_obj(test_sets, output_path, test_sets_obj_file)   
+            save_obj(sub_test_set, output_path, test_sets_obj_file)   
             self.model_set = model_set
-            self.test_sets = test_sets
+            self.sub_test_set = sub_test_set
         else:
             model_set = get_object(output_path, model_obj_file)
-            test_sets = get_object(output_path, test_sets_obj_file)
+            sub_test_set = get_object(output_path, test_sets_obj_file)
             self.model_set = model_set
-            self.test_sets = test_sets
+            self.sub_test_set = sub_test_set
+            
+        print('Test')
 
     def model_training(self, adj_model_training, adj_benchmark_training, benchmark):
         self.benchmark = benchmark
@@ -198,10 +213,7 @@ class PredictionModel:
             
             early_stopping = keras.callbacks.EarlyStopping(patience=20,
                                                            restore_best_weights=True)
-            
-            # check_point = keras.callbacks.ModelCheckpoint(output_path+'\\'+trained_neural_network_file,
-            #                                               save_best_only=True)
-            
+
             model.compile(loss='binary_crossentropy',
                           optimizer='sgd',
                           metrics=['accuracy'])
@@ -249,7 +261,7 @@ class PredictionModel:
             
     def model_evaluation(self):
         model_set = self.model_set
-        sub_test_sets = self.test_sets
+        sub_test_set = self.sub_test_set
         x_test = model_set['x_test']
         y_test = model_set['y_test']
         
@@ -286,9 +298,9 @@ class PredictionModel:
         self.benchmark_prediction = benchmark_prediction
         
         sub_results = pd.DataFrame()
-        for i in range(1, self.n_sub_testset+1):
-            x_test = sub_test_sets[f'x_test_{i}']
-            y_test = sub_test_sets[f'y_test_{i}']
+        for i in range(1, self.n_sub_test_set+1):
+            x_test = sub_test_set[f'x_test_{i}']
+            y_test = sub_test_set[f'y_test_{i}']
             y_pred = model.predict_classes(x_test)
             
             score = accuracy_score(y_test, y_pred)
