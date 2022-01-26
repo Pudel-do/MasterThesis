@@ -147,31 +147,48 @@ class DataPreparation:
         self.base = self.base.join(self.port_data[col_industry])
     
     def extended_preprocessing(self, adj_underwriter_matching):
-        mean_prc_rg = np.where(pd.isnull(self.base['OriginalMiddleOfFilingPriceRange']) == True,
-                                         self.base['AmendedMiddleOfFilingPrice'],
-                                         self.base['OriginalMiddleOfFilingPriceRange'])
+        mean_prc_rg = np.where(pd.isnull(self.base['AmendedMiddleOfFilingPrice']) == True,
+                                         self.base['OriginalMiddleOfFilingPriceRange'],
+                                         self.base['AmendedMiddleOfFilingPrice'])
                                 
-        min_prc_rg = np.where(pd.isnull(self.base['OriginalLowFilingPrice']) == True,
-                                        self.base['AmendedLowFilingPrice'],
-                                        self.base['OriginalLowFilingPrice'])
+        min_prc_rg = np.where(pd.isnull(self.base['AmendedLowFilingPrice']) == True,
+                                        self.base['OriginalLowFilingPrice'],
+                                        self.base['AmendedLowFilingPrice'])
                                 
-        max_prc_rg = np.where(pd.isnull(self.base['OriginalHighFilingPrice']) == True,
-                                        self.base['AmendedHighFilingPrice'],
-                                        self.base['OriginalHighFilingPrice'])
+        max_prc_rg = np.where(pd.isnull(self.base['AmendedHighFilingPrice']) == True,
+                                        self.base['OriginalHighFilingPrice'],
+                                        self.base['AmendedHighFilingPrice'])
         
         self.base['MeanPriceRange'] = mean_prc_rg
         self.base['MinPriceRange'] = min_prc_rg
         self.base['MaxPriceRange'] = max_prc_rg
 # =========================         
-        shares_filed = np.where(pd.isnull(self.base['SharesFiledSumOfAllMkts']) == True,
-                                          self.base['AmendedShsFiledSumOfAllMkts'],
-                                          self.base['SharesFiledSumOfAllMkts'])
+        total_shares_filed = np.where(pd.isnull(self.base['AmendedShsFiledSumOfAllMkts']) == True,
+                                      self.base['SharesFiledSumOfAllMkts'],
+                                      self.base['AmendedShsFiledSumOfAllMkts'])
+        total_shares_filed_idx = self.base['SharesFiledSumOfAllMkts'].index
+        total_shares_filed = pd.Series(total_shares_filed, index = total_shares_filed_idx)
+        total_shares_filed = total_shares_filed.str.replace(',', '')
+        total_shares_filed = total_shares_filed.astype(float)
+        self.base['TotalSharesFiled'] = total_shares_filed
         
-        shares_filed_idx = self.base['SharesFiledSumOfAllMkts'].index
-        shares_filed = pd.Series(shares_filed, index = shares_filed_idx)
-        shares_filed = shares_filed.str.replace(',', '')
-        shares_filed = shares_filed.astype(float)
-        self.base['SharesFiled'] = shares_filed
+        primary_shares_filed = np.where(pd.isnull(self.base['AmendedPrimaryShsFiledSumOfAllMkts']) == True,
+                                        self.base['PrimaryShsFiledSumOfAllMkts'],
+                                        self.base['AmendedPrimaryShsFiledSumOfAllMkts'])
+        primary_shares_filed_idx = self.base['PrimaryShsFiledSumOfAllMkts'].index
+        primary_shares_filed = pd.Series(primary_shares_filed, index = primary_shares_filed_idx)
+        primary_shares_filed = primary_shares_filed.str.replace(',', '')
+        primary_shares_filed = primary_shares_filed.astype(float)
+        self.base['PrimarySharesFiled'] = primary_shares_filed
+        
+        secondary_shares_filed = np.where(pd.isnull(self.base['AmendedSecondaryShsFiledSumOfAllMkts']) == True,
+                                          self.base['SecondaryShsFiledSumOfAllMkts'],
+                                          self.base['AmendedSecondaryShsFiledSumOfAllMkts'])
+        secondary_shares_filed_idx = self.base['SecondaryShsFiledSumOfAllMkts'].index
+        secondary_shares_filed = pd.Series(secondary_shares_filed, index = secondary_shares_filed_idx)
+        secondary_shares_filed = secondary_shares_filed.str.replace(',', '')
+        secondary_shares_filed = secondary_shares_filed.astype(float)
+        self.base['SecondarySharesFiled'] = secondary_shares_filed
 # =========================       
         ritter_data = pd.read_excel(input_path+'\\'+uw_file,
                                             engine = 'openpyxl',
