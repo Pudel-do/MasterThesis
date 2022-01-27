@@ -27,15 +27,16 @@ model_cols = [
     'UnderwriterRank', 'TotalAssets', 'TechDummy', 
     'VentureDummy', 'AMEX', 'NASDQ', 'NYSE',
     'ExpectedProceeds', 'ActualProceeds',
-    'SectorVolume', 'Volume',
-    'MarketReturn', 'MarketReturnSlopeDummy',
-    'SectorReturn', 'SectorReturnSlopeDummy',
-    'PriceRevision', 'PriceRevisionSlopeDummy',
-    'PriceRevisionMaxDummy', 'PriceRevisionMinDummy',
-    'PriceRevisionMaxSlopeDummy', 'PriceRevisionMinSlopeDummy',
-    'WordsRevisionDummy', 'PositiveWordsRevision', 'NegativeWordsRevision',
-    'SharesRevision', 'SharesRevisionSlopeDummy',
-    'RegistrationDays', 'IssueDate',
+    'SectorVolume', 'Volume', 'MarketReturn', 
+    'MarketReturnSlopeDummy', 'SectorReturn', 
+    'SectorReturnSlopeDummy', 'PriceRevision', 
+    'PriceRevisionSlopeDummy', 'PriceRevisionMaxDummy', 
+    'PriceRevisionMinDummy', 'PriceRevisionMaxSlopeDummy', 
+    'PriceRevisionMinSlopeDummy', 'WordsRevisionDummy', 
+    'PositiveWordsRevision', 'NegativeWordsRevision',
+    'SecondarySharesDummy', 'SecondarySharesRevisionDummy', 
+    'SecondarySharesRevisionRatio', 'TotalSharesRevisionDummy',
+    'PrimarySharesRevisionDummy', 'RegistrationDays', 'IssueDate',
     ]
 
 class FeatureEngineering:
@@ -149,7 +150,6 @@ class FeatureEngineering:
         rank = np.where(self.full_data['Matching_Level'] >= treshold,
                         self.full_data['MeanRank'],
                         np.nan)
-        
         self.full_data['UnderwriterRank'] = rank
 # =========================
         tech_id = 1
@@ -178,23 +178,22 @@ class FeatureEngineering:
         mean_prc_rg = self.full_data['MeanPriceRange']
         min_prc_rg = self.full_data['MinPriceRange']
         max_prc_rg = self.full_data['MaxPriceRange']
-        shares_filed = self.full_data['SharesFiled']
+        tot_shares_filed = self.full_data['TotalSharesFiled']
+        tot_shares_offered = self.full_data['SharesOfferedSumOfAllMkts']
 
-        exp_pro = shares_filed * mean_prc_rg
+        exp_pro = tot_shares_filed * mean_prc_rg
         exp_pro = exp_pro * disc_fact
         exp_pro = np.log(exp_pro)
-        
-        exp_pro_min = shares_filed * min_prc_rg
+        exp_pro_min = tot_shares_filed * min_prc_rg
         exp_pro_min = exp_pro_min * disc_fact
-        exp_pro_max = shares_filed * max_prc_rg
+        exp_pro_max = tot_shares_filed * max_prc_rg
         exp_pro_max = exp_pro_max * disc_fact
-        
-        shares_offered = self.full_data['SharesOfferedSumOfAllMkts']
-        act_pro = shares_offered * offer_prc
+
+        act_pro = tot_shares_offered * offer_prc
         act_pro = act_pro * disc_fact
         act_pro = np.log(act_pro)
         
-        self.full_data['SharesOffered'] = shares_offered
+        self.full_data['TotalSharesOffered'] = tot_shares_offered
         self.full_data['ExpectedProceeds'] = exp_pro
         self.full_data['ExpectedProceedsMin'] = exp_pro_min
         self.full_data['ExpectedProceedsMax'] = exp_pro_max
@@ -502,17 +501,60 @@ class FeatureEngineering:
 # =========================
         offer_prc = self.full_data['OfferPrice']
         mid_prc_rg = self.full_data['MeanPriceRange']
-        prc_rev = (offer_prc / mid_prc_rg) -1
-        prc_rev = prc_rev * self.scale
         max_prc_rg = self.full_data['MaxPriceRange']
         min_prc_rg = self.full_data['MinPriceRange']
+        prc_rev = (offer_prc / mid_prc_rg) -1
+        prc_rev = prc_rev * self.scale
         self.full_data['PriceRevision'] = prc_rev
+
+        tot_shares_offered = self.full_data['TotalSharesOffered']
+        prim_shares_offered = self.full_data['PrimaryShsOfrdSumOfAllMkts']
+        sec_shares_offered = self.full_data['SecondaryShsOfrdSumOfAllMkts']
         
-        prim_shares_off = self.full_data['PrimaryShsOfrdSumOfAllMkts']
-        shares_fil = self.full_data['SharesFiled']
-        shares_rev = (prim_shares_off / shares_fil) -1
-        shares_rev = shares_rev * self.scale
-        self.full_data['SharesRevision'] = shares_rev
+        tot_shares_filed = self.full_data['TotalSharesFiled']
+        prim_shares_filed = self.full_data['PrimarySharesFiled']
+        sec_shares_filed = self.full_data['SecondarySharesFiled']
+        
+        primary_shares_mask = (self.full_data['SecondarySharesFiled'] == 0 )|\
+                              (self.full_data['SecondaryShsOfrdSumOfAllMkts'] == 0)
+                             
+        secondary_shares_mask = (self.full_data['SecondarySharesFiled'] != 0 )&\
+                                (self.full_data['SecondaryShsOfrdSumOfAllMkts'] != 0)                      
+                          
+        primary_shares_idx = self.full_data[primary_shares_mask].index
+        secondary_shares_idx = self.full_data[secondary_shares_mask].index
+        self.full_data.loc[primary_shares_idx, 'SecondarySharesDummy'] = 0
+        self.full_data.loc[secondary_shares_idx, 'SecondarySharesDummy'] = 1
+            
+        sec_shares_diff = sec_shares_offered - sec_shares_filed
+        sec_shares_rev = (sec_shares_offered / sec_shares_filed) -1
+        sec_shares_rev_dummy = np.where(sec_shares_rev > 0, 1 ,0)
+        nan_ident = pd.isnull(sec_shares_rev) == True
+        nan_idx = sec_shares_rev.loc[nan_ident].index
+        self.full_data['SecondarySharesRevision'] = sec_shares_rev
+        self.full_data['SecondarySharesRevisionDummy'] = sec_shares_rev_dummy
+        self.full_data['SecondarySharesRevisionDummy'].loc[nan_idx] = np.nan
+
+        sec_shares_rev_dummy = self.full_data['SecondarySharesRevisionDummy']
+        sec_shares_rev_ratio = sec_shares_diff / sec_shares_filed
+        sec_shares_rev_ratio = np.where(sec_shares_diff > 0, sec_shares_rev_ratio, 0)
+        self.full_data['SecondarySharesRevisionRatio'] = sec_shares_rev_ratio
+        nan_ident = pd.isnull(sec_shares_diff) == True
+        nan_idx = sec_shares_diff.loc[nan_ident].index
+        self.full_data['SecondarySharesRevisionRatio'].loc[nan_idx] = np.nan
+        
+        primary_shares_rev = (prim_shares_offered / prim_shares_filed) -1
+        primary_shares_rev_dummy = np.where(primary_shares_rev > 0, 1 ,0)
+        nan_ident = pd.isnull(primary_shares_rev) == True
+        nan_idx = primary_shares_rev.loc[nan_ident].index
+        self.full_data['PrimarySharesRevisionDummy'] = primary_shares_rev_dummy
+        
+        tot_shares_rev = (tot_shares_offered / tot_shares_filed) -1
+        tot_shares_rev_dummy = np.where(tot_shares_rev > 0, 1 ,0)
+        nan_ident = pd.isnull(tot_shares_rev) == True
+        nan_idx = tot_shares_rev.loc[nan_ident].index
+        self.full_data['TotalSharesRevisionDummy'] = tot_shares_rev_dummy
+        
         
         act_pro = self.full_data['ActualProceeds']
         exp_pro = self.full_data['ExpectedProceeds']
@@ -524,12 +566,10 @@ class FeatureEngineering:
 
         slope_dummy_cols = [
             'PriceRevision',
-            'SharesRevision',
             'ProceedsRevision'
             ]
         slope_dummy_vars = [
             prc_rev,
-            shares_rev,
             pro_rev
             ]
         for col, var in zip(slope_dummy_cols, slope_dummy_vars):
@@ -652,14 +692,14 @@ class FeatureEngineering:
 
         adj_outlier_cols = [
             'PriceRevision',
-            'SharesRevision',
+            'SecondarySharesRevisionRatio',
             'RegistrationDays'
             ]
         
         adj_whiskers = np.array([
             [-230.22, 229.67],
-            [-230.22, 200.00],
-            [0, 365.00] 
+            [0, 1],
+            [30, 365.00] 
             ])
         
         adj_whisk_cols = ['AdjustedLowerWhisker', 
@@ -671,8 +711,8 @@ class FeatureEngineering:
         n_outliers = 0
         for index, row in adj_whiskers.iterrows():
             data = self.model_data[index]
-            outlier_filter = (data <= row[adj_whisk_cols[0]])|\
-                             (data >= row[adj_whisk_cols[1]])
+            outlier_filter = (data < row[adj_whisk_cols[0]])|\
+                             (data > row[adj_whisk_cols[1]])
             outliers = data.loc[outlier_filter]
             outliers = outliers.index
             n_outliers += len(outliers)
