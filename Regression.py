@@ -37,8 +37,12 @@ class Regression:
         endog_var = 'InitialReturn'
         exog_var = reg_vars.copy()
         exog_var.remove('InitialReturn')
+        reg_sub_vars = reg_vars.copy()
+        reg_sub_vars.append('SecondarySharesRevisionDummy')
+        reg_sub_vars.append('SecondarySharesRevisionRatio')
         self.endog_var = endog_var
         self.exog_var = exog_var
+        self.reg_sub_vars = reg_sub_vars
         
         key_figures = ['AdjRSquared', 'SampleSize']
         key_col = 'Value'
@@ -74,6 +78,11 @@ class Regression:
         self.ols_result = result
         self.ols_full_result = full_result
         self.ols_keyfig = keyfig
+        
+    def ols_sub_regression(self):
+        reg_data = self.model_data[self.reg_sub_vars]
+        reg_data = reg_data.dropna()
+        print('Test')
             
     def fmb_regression(self, start_date, end_date):
         self.start = start_date
