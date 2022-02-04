@@ -27,7 +27,7 @@ ylabel_size = {'fontsize' : 15}
 suptitle_size = 25
 title_size = {'fontsize' : 25}
 legend_size = 'xx-large'
-hist_bins = 100
+hist_bins = 75
 cutting_line = 135*'='
 cutting_line_thin = 135*'-'
 paragraph = '\n\n\n\n'
@@ -50,11 +50,12 @@ def Performance_PredictionModel(obj, plot_prediction_performance):
         y_pred = pred_data['Prediction']
         report = classification_report(y_true, y_pred)
         
-        print(cutting_line)
-        print(f'Test set performance of {model} model')
-        print(cutting_line)
-        print(report)
-        print(cutting_line, paragraph)
+        if plot_prediction_performance == True:
+            print(cutting_line)
+            print(f'Test set performance of {model} model')
+            print(cutting_line)
+            print(report)
+            print(cutting_line, paragraph)
 
     returns = raw_data[target_col]
     prediction = model_pred['Prediction']
@@ -96,14 +97,15 @@ def Performance_PredictionModel(obj, plot_prediction_performance):
                            numalign = 'center',
                            showindex = True)
     
-    print(cutting_line)
-    print(f'Portfolio performance of predicted and randomly selected IPOs')
-    print(cutting_line, '\n')
-    print(plot_result)
-    print(cutting_line_thin)
-    print(f'Number of portfolio components: {n_port_comps}')
-    print(f'Number of samples for benchmark construction: {sample_number}')
-    print(cutting_line, paragraph)
+    if plot_prediction_performance == True:
+        print(cutting_line)
+        print(f'Portfolio performance of predicted and randomly selected IPOs')
+        print(cutting_line, '\n')
+        print(plot_result)
+        print(cutting_line_thin)
+        print(f'Number of portfolio components: {n_port_comps}')
+        print(f'Number of samples for benchmark construction: {sample_number}')
+        print(cutting_line, paragraph)
     
 
 def Analysis_SectorPortfolio(obj, plot_sectorportfolio):
@@ -411,6 +413,31 @@ def RegressionResults(obj, plot_yearly_regression):
         file = 'YeartoYearRegressionResults.xlsx'
         data.to_excel(output_path_results+'\\'+file)
         plt.show()
+# =========================
+    sub_reg_results = obj.sub_regression_results
+    sub_reg_keyfigs = obj.sub_regression_keyfigs
+
+    plot_reg_result = tabulate(sub_reg_results,
+                               headers = 'keys',
+                               floatfmt = '.2f',
+                               tablefmt = 'simple',
+                               numalign = 'center',
+                               showindex = True)
+    plot_reg_result = plot_reg_result.replace('nan', '---')
+
+    plot_keyfigs = tabulate(sub_reg_keyfigs,
+                            headers = 'keys',
+                            floatfmt = '.2f',
+                            tablefmt = 'simple',
+                            numalign = 'center',
+                            showindex = True)
+    
+    print(cutting_line)
+    print('Regression results of secondary shares analysis')
+    print(cutting_line, '\n')
+    print(plot_reg_result, '\n\n')
+    print(plot_keyfigs)
+    print(cutting_line, paragraph)
 
 def UnderpricingAnalysis(feat_eng_obj, pred_obj, plot_underpricing_analysis, target_return):
     initial_rets = feat_eng_obj.model_data
