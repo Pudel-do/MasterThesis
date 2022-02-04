@@ -12,7 +12,15 @@ import statsmodels.stats.weightstats as smw
 import sys
 from GetData import *
 import warnings
-# warnings.filterwarnings("ignore")
+warnings.filterwarnings("ignore")
+
+sub_reg_cols = [
+    'UnderwriterRank', 'TotalAssets',
+    'TechDummy', 'VentureDummy',
+    'ExpectedProceeds', 
+    'SecondarySharesRevisionDummy',
+    'SecondarySharesRevisionRatio'
+    ]
 
 class Regression:
     def __init__(self, feat_eng_obj, start_year, end_year):
@@ -37,12 +45,12 @@ class Regression:
         endog_var = 'InitialReturn'
         exog_var = reg_vars.copy()
         exog_var.remove('InitialReturn')
-        reg_sub_vars = reg_vars.copy()
-        reg_sub_vars.append('SecondarySharesRevisionDummy')
-        reg_sub_vars.append('SecondarySharesRevisionRatio')
+        sub_reg_vars = reg_vars.copy()
+        sub_reg_vars.append('SecondarySharesRevisionDummy')
+        sub_reg_vars.append('SecondarySharesRevisionRatio')
         self.endog_var = endog_var
         self.exog_var = exog_var
-        self.reg_sub_vars = reg_sub_vars
+        self.sub_reg_vars = sub_reg_vars
         
         key_figures = ['AdjRSquared', 'SampleSize']
         key_col = 'Value'
@@ -80,9 +88,60 @@ class Regression:
         self.ols_keyfig = keyfig
         
     def ols_sub_regression(self):
-        reg_data = self.model_data[self.reg_sub_vars]
-        reg_data = reg_data.dropna()
-        print('Test')
+        sub_reg_data = self.model_data[self.sub_reg_vars]
+        sub_reg_data = sub_reg_data.dropna()
+        
+        sub_reg_endog = sub_reg_data[self.endog_var]
+        sub_reg_exog = sub_reg_data[sub_reg_cols]
+        sub_reg_exog = sm.add_constant(sub_reg_exog)
+        sub_reg_exog_full = sub_reg_data[self.sub_reg_vars]
+        sub_reg_exog_full = sub_reg_exog_full.drop(columns=self.endog_var)
+        sub_reg_exog_full = sm.add_constant(sub_reg_exog_full)
+        
+        ols_sub_reg = sm.OLS(endog = sub_reg_endog, 
+                             exog = sub_reg_exog)
+        ols_sub_reg = ols_sub_reg.fit(cov_type='HC0')
+        
+        ols_sub_reg_full = sm.OLS(endog = sub_reg_endog, 
+                             exog = sub_reg_exog_full)
+        ols_sub_reg_full = ols_sub_reg_full.fit(cov_type='HC0')
+        
+        coefs = ols_sub_reg.params
+        coefs.name = 'Coefficient'
+        coefs = pd.DataFrame(coefs)
+        pvalues = ols_sub_reg.pvalues
+        pvalues.name = 'pvalue'
+        pvalues = pd.DataFrame(pvalues)
+        sub_reg_results = coefs.join(pvalues)
+        r_sqr = ols_sub_reg.rsquared_adj
+        n_obs = ols_sub_reg.nobs
+        keyfig = pd.DataFrame()
+        keyfig.loc['AdjRSquared', self.key_col] = r_sqr
+        keyfig.loc['SampleSize', self.key_col] = n_obs
+        
+        coefs_full = ols_sub_reg_full.params
+        coefs_full.name = 'Coefficient'
+        coefs_full = pd.DataFrame(coefs_full)
+        pvalues_full = ols_sub_reg_full.pvalues
+        pvalues_full.name = 'pvalue'
+        pvalues_full = pd.DataFrame(pvalues_full)
+        sub_reg_results_full = coefs_full.join(pvalues_full)
+        r_sqr_full = ols_sub_reg_full.rsquared_adj
+        n_obs_full = ols_sub_reg_full.nobs
+        keyfig_full = pd.DataFrame()
+        keyfig_full.loc['AdjRSquared', self.key_col] = r_sqr_full
+        keyfig_full.loc['SampleSize', self.key_col] = n_obs_full
+        
+        sub_regression_results = pd.concat([sub_reg_results_full,
+                                            sub_reg_results],
+                                           axis=1)
+        
+        sub_regresion_keyfigs = pd.concat([keyfig_full,
+                                           keyfig],
+                                          axis=1)
+        
+        self.sub_regression_results = sub_regression_results
+        self.sub_regression_keyfigs = sub_regresion_keyfigs
             
     def fmb_regression(self, start_date, end_date):
         self.start = start_date
