@@ -27,25 +27,17 @@ class DataPreparation:
         sdc_raw = pd.read_csv(input_path+'\\'+ sdc_raw_file,
                               parse_dates = ['IssueDate', 'FilingDate'])
         
-        dup_ident = ['Issuer']
-        sdc = sdc_raw.drop_duplicates(subset = dup_ident)
         ext_port_dt = self.start_date - DateOffset(years=1)
         
         rough_flt = (
-            (sdc['IssueDate'] >= ext_port_dt) &\
-            (sdc['IssueDate'] <= self.end_date) &\
-            (sdc['FilingDate'] <= self.end_date) &\
-            (pd.isnull(sdc['IssueDate']) == False) &\
-            (pd.isnull(sdc['FilingDate']) == False) &\
-            (pd.isnull(sdc['CUSIP9']) == False)
+            (sdc_raw['IssueDate'] >= ext_port_dt) &\
+            (sdc_raw['IssueDate'] <= self.end_date) &\
+            (sdc_raw['FilingDate'] <= self.end_date) &\
+            (pd.isnull(sdc_raw['IssueDate']) == False) &\
+            (pd.isnull(sdc_raw['FilingDate']) == False) &\
+            (pd.isnull(sdc_raw['CUSIP9']) == False)
             )   
-        sdc = sdc.loc[rough_flt]
-
-        start_year = ext_port_dt.strftime('%Y')
-        end_year = self.end_date.strftime('%Y')
-        ncusip = sdc['CUSIP9'].str[:8]        
-        ncusip_file = f'NCUSIP_{start_year}_{end_year}.txt'
-        sdc['NCUSIP'] = ncusip       
+        sdc = sdc_raw.loc[rough_flt]
         if adj_time_range == True:
             ncusip.to_csv(output_path+'\\'+ncusip_file,
                           header = False,
@@ -70,6 +62,24 @@ class DataPreparation:
                               
         port_data = sdc.loc[extended_flt]
         port_data = port_data.loc[exchange_flt]
+        
+        dup_ident = ['Issuer']
+        raw_duplicates = port_data.duplicated(subset=dup_ident, keep=False)
+        raw_duplicates = raw_duplicates.where(raw_duplicates==True)
+        raw_duplicates = raw_duplicates.dropna()
+        raw_duplicates = port_data.loc[raw_duplicates.index]
+        
+        duplicates = raw_duplicates[raw_duplicates['OrigIPO']!='Yes']
+        port_data = port_data.drop(duplicates.index)
+        port_data = port_data.drop_duplicates(subset=dup_ident, keep=False)
+        
+        start_year = ext_port_dt.strftime('%Y')
+        end_year = self.end_date.strftime('%Y')
+        ncusip = port_data['CUSIP9'].str[:8]        
+        ncusip_file = f'NCUSIP_{start_year}_{end_year}.txt'
+        port_data['NCUSIP'] = ncusip
+        ncusip.to_csv(output_path+'\\'+ncusip_file, header = False, index = False)
+        
         base_filter = port_data['IssueDate']>=self.start_date
         base = port_data.loc[base_filter]
         self.port_data = port_data
