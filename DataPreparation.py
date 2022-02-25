@@ -59,9 +59,16 @@ class DataPreparation:
             (sdc['ExchangeWhereIssuWillBeLi'] == 'NYSE') |\
             (sdc['ExchangeWhereIssuWillBeLi'] == 'AMEX')
                 )
+        
+        book_build_flt = (
+            (sdc['Issuer'] != 'Google Inc') &\
+            (sdc['LeadManagersLongName'] != 'WR Hambrecht & Co LLC')
+            )
                               
         port_data = sdc.loc[extended_flt]
         port_data = port_data.loc[exchange_flt]
+        port_data = port_data.loc[book_build_flt]
+        port_data = port_data.sort_values(by='Issuer')
         
         dup_ident = ['Issuer']
         raw_duplicates = port_data.duplicated(subset=dup_ident, keep=False)
@@ -71,8 +78,19 @@ class DataPreparation:
         
         duplicates = raw_duplicates[raw_duplicates['OrigIPO']!='Yes']
         port_data = port_data.drop(duplicates.index)
-        port_data = port_data.drop_duplicates(subset=dup_ident, keep=False)
+        remain_duplicates = port_data.duplicated(subset=dup_ident, keep=False)
+        remain_duplicates = remain_duplicates.where(remain_duplicates==True)
+        remain_duplicates = remain_duplicates.dropna()
+        remain_duplicates = port_data.loc[remain_duplicates.index]
         
+        duplicate_drop_dealnumber = [1203481009, 1094550009, 950269009,
+                                     2526400009, 1093434009, 1156225018]
+        duplicate_drop = port_data['DealNumber'].isin(duplicate_drop_dealnumber)
+        duplicate_drop = duplicate_drop.where(duplicate_drop==True)
+        duplicate_drop = duplicate_drop.dropna()
+        duplicate_drop_idx = duplicate_drop.index
+        port_data = port_data.drop(duplicate_drop_idx)
+
         start_year = ext_port_dt.strftime('%Y')
         end_year = self.end_date.strftime('%Y')
         ncusip = port_data['CUSIP9'].str[:8]        
