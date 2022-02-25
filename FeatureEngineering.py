@@ -624,26 +624,11 @@ class FeatureEngineering:
                 outlier_cols.append(col)
         
         idx = outlier_cols
-        measure_cols = [
-            'Mean', 'Median',
-            'Minimum', 'Maximum',
-            'StandardDeviation',
-            'LowerWhisker', 'UpperWhisker'
-            ]
-        
         stat_data = self.model_data[outlier_cols]
-        mean = stat_data.mean()
-        median = stat_data.median()
-        minimum = stat_data.min()
-        maximum = stat_data.max()
-        std = stat_data.std()
         nobs = len(stat_data)
-        measures = [mean, median, minimum, maximum, std]
-        
-        desc_stat = pd.DataFrame(index = idx)
-        desc_stat = desc_stat.join(measures)
+        desc_stat = stat_data.describe()
+        desc_stat = desc_stat.transpose()
 
-        
         for col in outlier_cols:
             data = self.model_data[col]
             data = data.dropna()
@@ -666,11 +651,10 @@ class FeatureEngineering:
             whisker_low = q1 - (whisker_factor * iqr)
             whisker_up = q3 + (whisker_factor * iqr)
             
-            desc_stat.loc[col, 'LowerWhisker'] = whisker_low
-            desc_stat.loc[col, 'UpperWhisker'] = whisker_up
+            desc_stat.loc[col, 'WhiskerLow'] = whisker_low
+            desc_stat.loc[col, 'WhiskerUp'] = whisker_up
             
         desc_stat.index = desc_stat.index.rename('Variable')
-        desc_stat.columns = measure_cols
         plot_desc_stat = tabulate(desc_stat,
                                   headers = 'keys',
                                   floatfmt = '.2f',
@@ -692,18 +676,16 @@ class FeatureEngineering:
 
         adj_outlier_cols = [
             'PriceRevision',
-            'SecondarySharesRevisionRatio',
             'RegistrationDays'
             ]
         
         adj_whiskers = np.array([
             [-230.22, 229.67],
-            [0, 1],
             [30, 365.00] 
             ])
         
-        adj_whisk_cols = ['AdjustedLowerWhisker', 
-                          'AdjustedUpperWhisker']
+        adj_whisk_cols = ['AdjustedWhiskerLow', 
+                          'AdjustedWhiskerUp']
         adj_whiskers = pd.DataFrame(adj_whiskers)
         adj_whiskers.columns = adj_whisk_cols
         adj_whiskers.index = adj_outlier_cols
@@ -719,23 +701,16 @@ class FeatureEngineering:
             self.model_data = self.model_data.drop(outliers)
             
         stat_data_adj = self.model_data[adj_outlier_cols]
-        mean_adj = stat_data_adj.mean()
-        median_adj = stat_data_adj.median()
-        minimum_adj = stat_data_adj.min()
-        maximum_adj = stat_data_adj.max()
-        std_adj = stat_data_adj.std()
         nobs_adj = len(stat_data_adj)
-        measures_adj = [mean_adj, median_adj,
-                        minimum_adj, maximum_adj,
-                        std_adj, adj_whiskers]
         
         idx = outlier_cols
-        adj_cols = measure_cols[:-2]
+        adj_cols = desc_stat.columns[:-2]
+        adj_cols = list(adj_cols)
         adj_cols.append(adj_whisk_cols[0])
         adj_cols.append(adj_whisk_cols[1])
-        desc_stat_adj = pd.DataFrame(index = idx)
-        desc_stat_adj = desc_stat_adj.join(measures_adj)
-        desc_stat_adj.columns = adj_cols
+        desc_stat_adj = stat_data_adj.describe()
+        desc_stat_adj = desc_stat_adj.transpose()
+        desc_stat_adj = desc_stat_adj.join(adj_whiskers)
         
         for col in adj_outlier_cols:
             if plot_outliers == True:
@@ -755,7 +730,6 @@ class FeatureEngineering:
                                       tablefmt = 'simple',
                                       numalign = 'center',
                                       showindex = True)
-        plot_desc_stat_adj = plot_desc_stat_adj.replace('nan', '---')
             
         print(cutting_line)
         print('Descriptive statistic after outlier adjustments')
