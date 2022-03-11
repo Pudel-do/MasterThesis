@@ -12,6 +12,7 @@ import sys
 from pandas.tseries.offsets import DateOffset
 from fuzzywuzzy import fuzz
 from fuzzywuzzy import process
+from datetime import datetime
 from GetData import *
 import warnings
 warnings.filterwarnings("ignore")
@@ -103,7 +104,7 @@ class DataPreparation:
         self.port_data = port_data
         self.base = base
         
-    def build_aux_vars(self, industry_treshold):   
+    def build_aux_vars(self):   
         onebday_offset = pd.offsets.BusinessDay(1)
         twobday_offset = pd.offsets.BusinessDay(2)
         first_trade_dt = self.base['IssueDate'] + onebday_offset
@@ -129,6 +130,105 @@ class DataPreparation:
         registration_days = (self.base['IssueDate'] - self.base['FilingDate'])
         registration_days = registration_days.dt.days
         self.base['RegistrationDays'] = registration_days
+# =========================
+        prc_range_length_match = []
+        prc_range_length_match_benchmark = []
+        prc_range_missmatch = []
+        shs_filed_lenght_match = []
+        shs_filed_lenght_match_benchmark = []
+        shs_filed_missmatch = []
+        self.base = self.base.reset_index(drop=True)
+        for index, row in self.base.iterrows():
+            if (pd.isnull(row['HistoryHighFilingPrice']) == False)&\
+            (pd.isnull(row['HistoryLowFilingPrice']) == False)&\
+            (pd.isnull(row['AmendMentDate']) == False):
+                amend_high_prc = row['HistoryHighFilingPrice']
+                amend_high_prc = re.findall(r'[^|]+(?=|[^|]*$)', amend_high_prc)
+                amend_low_prc = row['HistoryLowFilingPrice']
+                amend_low_prc = re.findall(r'[^|]+(?=|[^|]*$)', amend_low_prc)
+                amend_dates = row['AmendMentDate']
+                amend_dates = re.findall(r'[^|]+(?=|[^|]*$)', amend_dates)
+                n_amend_high_prc = len(amend_high_prc)
+                n_amend_low_prc = len(amend_low_prc)
+                n_amend_dates = len(amend_dates)
+                
+                try:
+                    last_high_prc = amend_high_prc[n_amend_high_prc-1]
+                    last_high_prc = float(last_high_prc)
+                    last_low_prc = amend_low_prc[n_amend_low_prc-1]
+                    last_low_prc = float(last_low_prc)
+                except:
+                    prc_range_missmatch.append(index)
+                    
+                if pd.isnull(row['AmendedHighFilingPrice']) == False:
+                    if last_high_prc != row['AmendedHighFilingPrice'] or \
+                    last_low_prc != row['AmendedLowFilingPrice']:
+                        prc_range_missmatch.append(index)
+                        
+                prc_range_length_match_benchmark.append(index)
+                if n_amend_high_prc == n_amend_dates:
+                    prc_range_length_match.append(index)
+                    if n_amend_high_prc > 1:
+                        base_prc_high = amend_high_prc[0]
+                        base_prc_low = amend_low_prc[0]
+                        adj_prc_id = 0
+                        for i in range(n_amend_high_prc):
+                            if amend_high_prc[i] != base_prc_high:
+                                base_prc_high = amend_high_prc[i]
+                                adj_prc_id = i
+                                break
+                            elif amend_low_prc[i] != base_prc_low:
+                                base_prc_low = amend_low_prc[i]
+                                adj_prc_id = i 
+                    else:
+                        adj_prc_id = 0 
+                        
+                    last_prc_adj_date = amend_dates[adj_prc_id]
+                    last_prc_adj_date = datetime.strptime(last_prc_adj_date, '%d/%m/%y')
+                    last_prc_offer_days = (row['IssueDate'] - last_prc_adj_date)
+                    last_prc_offer_days = last_prc_offer_days.days
+                    self.base.loc[index, 'LastPriceAdjustOfferDays'] = last_prc_offer_days
+                    
+            if (pd.isnull(row['AmendHistShsFiledSumOfAllMkts']) == False)&\
+            (pd.isnull(row['AmendedShsFiledSumOfAllMkts']) == False)&\
+            (pd.isnull(row['AmendMentDate']) == False):
+                amend_shs_filed = row['AmendHistShsFiledSumOfAllMkts']
+                amend_shs_filed = re.findall(r'[^|]+(?=|[^|]*$)', amend_shs_filed)
+                amend_dates = row['AmendMentDate']
+                amend_dates = re.findall(r'[^|]+(?=|[^|]*$)', amend_dates)
+                n_amend_shs_filed = len(amend_shs_filed)
+                n_amend_dates = len(amend_dates)
+                last_shs_filed = amend_shs_filed[n_amend_shs_filed-1]
+                
+                if last_shs_filed != row['AmendedShsFiledSumOfAllMkts']:
+                    shs_filed_missmatch.append(index)
+
+                shs_filed_lenght_match_benchmark.append(index)
+                if n_amend_shs_filed == n_amend_dates:
+                    shs_filed_lenght_match.append(index)
+                    if n_amend_shs_filed > 1:
+                        base_shs_filed = amend_shs_filed[0]
+                        adj_shs_id = 0
+                        for i in range(n_amend_shs_filed):
+                            if amend_shs_filed[i] != base_shs_filed:
+                                base_shs_filed = amend_shs_filed[i]
+                                adj_shs_id = i
+                    else:
+                        adj_shs_id = 0
+                        
+                    last_shs_adj_date = amend_dates[adj_shs_id]
+                    last_shs_adj_date = datetime.strptime(last_shs_adj_date, '%d/%m/%y')
+                    last_shs_offer_days = (row['IssueDate'] - last_shs_adj_date)
+                    last_shs_offer_days = last_shs_offer_days.days
+                    self.base.loc[index, 'LastShareAdjustOfferDays'] = last_shs_offer_days
+                    
+        amendments_date_price_match_ratio = len(prc_range_length_match) / len(self.base)
+        amendments_date_filedshares_match_ratio = len(shs_filed_lenght_match) / len(self.base)
+        
+        self.amendments_date_price_match_ratio = amendments_date_price_match_ratio
+        self.amendments_date_filedshares_match_ratio = amendments_date_filedshares_match_ratio
+        self.amendments_price_range_missmatch = prc_range_missmatch
+        self.amendments_filedshares_missmatch = shs_filed_missmatch
 # =========================
         ff_industry_data = pd.read_excel(input_path+'\\'+industry_dummies_file, 
                                          engine = 'openpyxl')
@@ -161,11 +261,10 @@ class DataPreparation:
             else:
                 self.port_data.loc[index, col_industry] = np.nan
 
-        
-        treshold = industry_treshold
+        industry_treshold = 0.01
         indu_dist = self.port_data[col_industry]
         indu_dist = indu_dist.value_counts(normalize=True)
-        indu_dist_adj = indu_dist.where(indu_dist >= treshold)
+        indu_dist_adj = indu_dist.where(indu_dist >= industry_treshold)
         indu_dist_adj = indu_dist_adj.dropna()
         valid_industries = pd.Series(indu_dist_adj.index)
         
@@ -173,6 +272,7 @@ class DataPreparation:
         self.industry_dist_adj = indu_dist_adj
         self.valid_industries = valid_industries
         self.base = self.base.join(self.port_data[col_industry])
+        
     
     def extended_preprocessing(self, adj_underwriter_matching):
         mean_prc_rg = np.where(pd.isnull(self.base['AmendedMiddleOfFilingPrice']) == True,
@@ -237,7 +337,8 @@ class DataPreparation:
             rank_data = name.join(rank_2001_2020)
         else:
             rank_data = name.join(rank_1985_2000)
-          
+        
+        rank_data = rank_data.round(1)
         rank_data = rank_data.replace(-9,np.nan)
         rank_data['MeanRank'] = rank_data.mean(axis = 1)
         rank_data['MinRank'] = rank_data.min(axis = 1)
@@ -331,7 +432,12 @@ class DataPreparation:
         self.full_data = pd.merge(self.full_data,
                                   prospectus_data,
                                   how = 'left',
-                                  on = 'DealNumber')                
+                                  on = 'DealNumber')
+
+        self.full_data['FinalProspectusDateFiled'] = pd.to_datetime(self.full_data['FinalProspectusDateFiled'])
+        final_prosp_offer_days = (self.full_data['IssueDate'] - self.full_data['FinalProspectusDateFiled'])
+        final_prosp_offer_days = final_prosp_offer_days.dt.days
+        self.full_data['FinalProspectusOfferDays'] = final_prosp_offer_days           
 # =========================         
         total_assets = pd.read_csv(input_path+'\\'+total_assets_file)
         self.full_data = pd.merge(self.full_data,
@@ -344,7 +450,7 @@ class DataPreparation:
                                  names = ['Date', 'CPI'])
         
         start = self.start_date
-        base_year = start - DateOffset(years=1)
+        base_year = start
         base_year = base_year.strftime('%Y')
         
         cpi_dt_adj = cpi_data['Date'].dt.strftime('%Y')
