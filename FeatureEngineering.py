@@ -27,23 +27,25 @@ model_cols = [
     'UnderwriterRank', 'TotalAssets', 'TechDummy', 
     'VentureDummy', 'AMEX', 'NASDQ', 'NYSE',
     'ExpectedProceeds', 'ActualProceeds',
-    'SectorVolume', 'Volume', 'MarketReturn', 
-    'MarketReturnSlopeDummy', 'SectorReturn', 
-    'SectorReturnSlopeDummy', 'PriceRevision', 
-    'PriceRevisionSlopeDummy', 'PriceRevisionMaxDummy', 
-    'PriceRevisionMinDummy', 'PriceRevisionMaxSlopeDummy', 
-    'PriceRevisionMinSlopeDummy', 'WordsRevisionDummy', 
-    'PositiveWordsRevision', 'NegativeWordsRevision',
+    'SectorVolume', 'TechSectorVolume', 'Volume', 
+    'MarketReturn', 'MarketReturnSlopeDummy', 
+    'SectorReturn', 'SectorReturnSlopeDummy', 
+    'PriceRevision', 'PriceRevisionSlopeDummy', 
+    'PriceRevisionMaxDummy', 'PriceRevisionMaxSlopeDummy', 
+    'PriceRevisionMinDummy', 'PriceRevisionMinSlopeDummy', 
+    'WordsRevisionDummy', 'PositiveWordsRevision', 'NegativeWordsRevision',
     'SecondarySharesDummy', 'SecondarySharesRevisionDummy', 
     'SecondarySharesRevisionRatio', 'TotalSharesRevisionDummy',
-    'PrimarySharesRevisionDummy', 'RegistrationDays', 'IssueDate',
+    'PrimarySharesRevisionDummy', 'RegistrationDays', 
+    'LastPriceAdjustOfferDays', 'LastShareAdjustOfferDays', 
+    'FinalProspectusOfferDays', 'IssueDate',
     ]
 
 class FeatureEngineering:
-    def __init__(self, prep_obj, scale_factor):
+    def __init__(self, prep_obj):
         self.prep_obj = prep_obj
         self.full_data = prep_obj.full_data
-        self.scale = scale_factor
+        self.scale = 100
         self.model_cols = model_cols
         
     def preprocessing(self, adj_raw_prospectuses):
@@ -92,46 +94,47 @@ class FeatureEngineering:
                     if pd.isnull(row[f'{form}FileName']) == False:
                         file = row[f'{form}FileName']
                         path = raw_prospectus_path+'\\'+form+'\\'+file
-                        try:
-                            raw_prosp = open(path+'\\'+file, 'r')
-                            raw_prosp = raw_prosp.read()
-                            
-                            prosp = raw_prosp.rstrip()
-                            prosp = re.sub(r'\n', '', prosp)
-                            prosp = re.sub(r'\t', '', prosp)
-                            prosp = re.sub(r'\v', '', prosp)
+                        output_file_name = row['DealNumber']
+                        output_file_name = f'{output_file_name}.txt'
+                        output_path_name = input_path+'\\'+form
+                        if os.path.isfile(output_path_name+'\\'+output_file_name)==False:
+                            try:
+                                raw_prosp = open(path+'\\'+file, 'r')
+                                raw_prosp = raw_prosp.read()
+                                
+                                prosp = raw_prosp.rstrip()
+                                prosp = re.sub(r'\n', '', prosp)
+                                prosp = re.sub(r'\t', '', prosp)
+                                prosp = re.sub(r'\v', '', prosp)
+                                
+                                chars = ['-----END PRIVACY-ENHANCED MESSAGE-----', 
+                                         '<DIV>', '<TR>', '<TD>', '<FONT>', '_'
+                                         ] 
+                                for char in chars:
+                                    prosp = re.sub(char, '', prosp)
 
-                            chars = ['-----END PRIVACY-ENHANCED MESSAGE-----', 
-                                      '<DIV>', '<TR>', '<TD>', '<FONT>', '_'
-                                      ] 
-                            for char in chars:
-                                prosp = re.sub(char, '', prosp)
-
-                            prosp = re.sub(r'^.*?</SEC-HEADER>', '', prosp) 
-                            prosp = re.sub(r'<TABLE>.+?</TABLE>', '', prosp) 
-                            prosp = re.sub(r'<XBRL>.+?</XBRL>', '', prosp) 
-                            prosp = re.sub(r'\s*<TYPE>(?:GRAPHIC|ZIP|EXCEL|PDF).+?end', '', prosp) 
-                            prosp = re.sub(r'(-|\.|=)\s*', '', prosp) 
-                            prosp = re.sub(r'-\s*$\s+', '', prosp) 
-                            prosp = re.sub(r'-(?!\w)|(?<!\w)-', '', prosp) 
-                            prosp = re.sub(r' {3,}', ' ', prosp) 
-                            prosp = re.sub(r'and/or', 'and or', prosp) 
-                            prosp = prosp.encode("ascii", "ignore")
-                            prosp = prosp.decode()
-                            html_soup = BeautifulSoup(prosp, 'lxml')
-                            prosp = html_soup.get_text()
-                            prosp = re.sub(r'<.+?>', '', prosp) 
-
-                            file_name = row['DealNumber']
-                            file_name = f'{file_name}.txt'
-                            path_name = input_path+'\\'+form
-                            output_file = open(path_name+'\\'+file_name,
-                                               'w', encoding='utf-8')
-                            output_file.write(prosp)
-                            output_file.close()
-                            classified_prospectuses += 1
-                        except:
-                            unclassified_prospectuses += 1
+                                prosp = re.sub(r'^.*?</SEC-HEADER>', '', prosp) 
+                                prosp = re.sub(r'<TABLE>.+?</TABLE>', '', prosp) 
+                                prosp = re.sub(r'<XBRL>.+?</XBRL>', '', prosp) 
+                                prosp = re.sub(r'\s*<TYPE>(?:GRAPHIC|ZIP|EXCEL|PDF).+?end', '', prosp) 
+                                prosp = re.sub(r'(-|\.|=)\s*', '', prosp) 
+                                prosp = re.sub(r'-\s*$\s+', '', prosp) 
+                                prosp = re.sub(r'-(?!\w)|(?<!\w)-', '', prosp) 
+                                prosp = re.sub(r' {3,}', ' ', prosp) 
+                                prosp = re.sub(r'and/or', 'and or', prosp) 
+                                prosp = prosp.encode("ascii", "ignore")
+                                prosp = prosp.decode()
+                                html_soup = BeautifulSoup(prosp, 'lxml')
+                                prosp = html_soup.get_text()
+                                prosp = re.sub(r'<.+?>', '', prosp) 
+                                
+                                output_file = open(output_path_name+'\\'+output_file_name,
+                                                   'w', encoding='utf-8')
+                                output_file.write(prosp)
+                                output_file.close()
+                                classified_prospectuses += 1
+                            except:
+                                unclassified_prospectuses += 1
                             
             self.classified_prospectuses = classified_prospectuses
             self.unclassified_prospectuses = unclassified_prospectuses
@@ -278,7 +281,7 @@ class FeatureEngineering:
                     port_period = port_period.set_index('Date')
 # =========================
                 index_ret = port_period.join(index_rets, how = 'left')
-                index_ret = index_ret.sum()
+                index_ret = index_ret.mean()
                 index_ret = float(index_ret)
                 index_ret = index_ret * self.scale
 
@@ -287,17 +290,28 @@ class FeatureEngineering:
 # =========================
                 prior_weeks = row['IssueDate'] - DateOffset(weeks=6)
                 follow_weeks = row['IssueDate'] + DateOffset(weeks=2)
-                division = row['TechDummy']
+                division = row['Industry']
+                tech_divison = row['TechDummy']
                 
                 sector_ipo_mask = (port_data['IssueDate'] >= prior_weeks) &\
                                   (port_data['IssueDate'] <= follow_weeks) &\
-                                  (port_data['TechDummy'] == division)     
+                                  (port_data['Industry'] == division)     
                 sector_ipo_volume = port_data.loc[sector_ipo_mask]
                 sector_ipo_volume = sector_ipo_volume['NCUSIP']
                 sector_ipo_volume = sector_ipo_volume.drop_duplicates()
                 sector_ipo_volume = len(sector_ipo_volume)
                 feature = ['SectorVolume']
                 public_features.loc[index, feature] = sector_ipo_volume
+                
+                tech_sector_ipo_mask = (port_data['IssueDate'] >= prior_weeks) &\
+                                       (port_data['IssueDate'] <= follow_weeks) &\
+                                       (port_data['TechDummy'] == tech_divison)     
+                tech_sector_ipo_volume = port_data.loc[tech_sector_ipo_mask]
+                tech_sector_ipo_volume = tech_sector_ipo_volume['NCUSIP']
+                tech_sector_ipo_volume = tech_sector_ipo_volume.drop_duplicates()
+                tech_sector_ipo_volume = len(tech_sector_ipo_volume)
+                feature = ['TechSectorVolume']
+                public_features.loc[index, feature] = tech_sector_ipo_volume
                 
                 ipo_mask = (port_data['IssueDate'] >= prior_weeks) &\
                            (port_data['IssueDate'] <= follow_weeks)
@@ -331,10 +345,11 @@ class FeatureEngineering:
                                 comp_rets = match_dt.loc[comp_ident]
                                 
                                 noa = len(port_comp)
-                                sector_ret = comp_rets['RETX'].sum()
-                                sector_ret = 1/noa * sector_ret
-                                sector_ret = sector_ret * self.scale
-                                public_features.loc[index, feature] = sector_ret
+                                sector_port = comp_rets.groupby(['NCUSIP']).mean()
+                                sector_port_ret = 1/noa * sector_port.sum()
+                                sector_port_ret = float(sector_port_ret)
+                                sector_port_ret = sector_port_ret * self.scale
+                                public_features.loc[index, feature] = sector_port_ret
                                 
                                 year = row['IssueDate'].strftime('%Y')
                                 sector_port_results.loc[index, 'PortfolioComponents'] = noa
@@ -357,10 +372,11 @@ class FeatureEngineering:
                             comp_rets = match_dt.loc[comp_ident]
                         
                             noa = len(port_comp)
-                            sector_ret = comp_rets['RETX'].sum()
-                            sector_ret = 1/noa * sector_ret
-                            sector_ret = sector_ret * self.scale
-                            public_features.loc[index, feature] = sector_ret
+                            sector_port = comp_rets.groupby(['NCUSIP']).mean()
+                            sector_port_ret = 1/noa * sector_port.sum()
+                            sector_port_ret = float(sector_port_ret)
+                            sector_port_ret = sector_port_ret * self.scale
+                            public_features.loc[index, feature] = sector_port_ret
                         
                             year = row['IssueDate'].strftime('%Y')
                             sector_port_results.loc[index, 'PortfolioComponents'] = noa
@@ -613,6 +629,8 @@ class FeatureEngineering:
         self.model_data = self.full_data[model_cols]
            
     def outlier_adjustment(self, whisker_factor, plot_outliers):
+        percs = [0.05, 0.25, 0.5, 0.75, 0.95]
+        
         drop_cols = [
             'Dummy', 'SlopeDummy', 'Min', 'Max',
             'UnderwriterRank', 'AMEX', 
@@ -626,7 +644,7 @@ class FeatureEngineering:
         idx = outlier_cols
         stat_data = self.model_data[outlier_cols]
         nobs = len(stat_data)
-        desc_stat = stat_data.describe()
+        desc_stat = stat_data.describe(percentiles=percs)
         desc_stat = desc_stat.transpose()
 
         for col in outlier_cols:
@@ -676,12 +694,16 @@ class FeatureEngineering:
 
         adj_outlier_cols = [
             'PriceRevision',
-            'RegistrationDays'
+            'RegistrationDays',
+            'LastPriceAdjustOfferDays',
+            'LastShareAdjustOfferDays'
             ]
         
         adj_whiskers = np.array([
             [-230.22, 229.67],
-            [30, 365.00] 
+            [20, 446],
+            [0, 446],
+            [0, 446]
             ])
         
         adj_whisk_cols = ['AdjustedWhiskerLow', 
@@ -700,17 +722,14 @@ class FeatureEngineering:
             n_outliers += len(outliers)
             self.model_data = self.model_data.drop(outliers)
             
-        stat_data_adj = self.model_data[adj_outlier_cols]
+        stat_data_adj = self.model_data[outlier_cols]
         nobs_adj = len(stat_data_adj)
         
-        idx = outlier_cols
-        adj_cols = desc_stat.columns[:-2]
-        adj_cols = list(adj_cols)
-        adj_cols.append(adj_whisk_cols[0])
-        adj_cols.append(adj_whisk_cols[1])
-        desc_stat_adj = stat_data_adj.describe()
+        desc_stat_adj = stat_data_adj.describe(percentiles=percs)
         desc_stat_adj = desc_stat_adj.transpose()
-        desc_stat_adj = desc_stat_adj.join(adj_whiskers)
+        for index, row in adj_whiskers.iterrows():
+            for col in adj_whisk_cols:
+                desc_stat_adj.loc[index, col] = row[col]
         
         for col in adj_outlier_cols:
             if plot_outliers == True:
