@@ -17,7 +17,7 @@ from sklearn.metrics import roc_auc_score
 from tabulate import tabulate 
 import re 
 from re import search
-
+from GetData import *
 
 output_path_results = r'C:\Users\Matthias Pudel\OneDrive\Studium\Master\Master Thesis\Empirical Evidence\Results'
 
@@ -31,6 +31,50 @@ hist_bins = 75
 cutting_line = 135*'='
 cutting_line_thin = 135*'-'
 paragraph = '\n\n\n\n'
+
+def WritePlotData(feat_eng_obj, write_plot_data):
+    obj = feat_eng_obj
+    raw_data = obj.model_data
+    
+    hist_data_cols = ['MarketReturn', 'SectorReturn']
+    hist_data = raw_data[hist_data_cols]
+    hist_data = hist_data.round(2)
+    if write_plot_data == True:
+        file_name = 'ReturnHistograms.xlsx'
+        hist_data.to_excel(output_path_plots+'\\'+file_name)
+        
+
+def Analysis_Underpricing(feat_eng_obj, plot_initial_return_analysis):
+    obj = feat_eng_obj
+    raw_data = obj.full_data
+    data = raw_data[['InitialReturn', 'IssueDate']]
+    data['Year'] = data['IssueDate'].dt.strftime('%Y')
+    data['Year'] = data['Year']
+    data = data.drop(columns=['IssueDate'])
+    data = data.dropna()
+    grouped_return = data.groupby(['Year']).mean()
+    grouped_ipos = data.groupby(['Year']).size()
+    grouped_ipos = pd.DataFrame(grouped_ipos)
+    grouped_ipos.columns = ['Count_IPO']
+    grouped_data = grouped_return.join(grouped_ipos)
+    
+    file_name = 'TimeSeries_Underpricing.xlsx'
+    grouped_data.to_excel(output_path_plots+'\\'+file_name)
+    
+    if plot_initial_return_analysis == True:
+        fig, ax1 = plt.subplots(figsize = figsize)
+        plt.bar(grouped_data.index, grouped_data['InitialReturn'],
+                label='Initial Return')
+        plt.legend(loc=1)
+        plt.xlabel('Date', fontdict = xlabel_size)
+        plt.ylabel('Initial Return', fontdict = ylabel_size)
+        plt.title('Time series of initial returns and IPO volume', 
+                  fontdict = title_size)
+        ax2 = ax1.twinx()
+        plt.plot(grouped_data['Count_IPO'], 
+                 'g', lw=1.5, label='IPO Volume')
+        plt.legend(loc=5)
+        plt.ylabel('IPO Volume')
 
 def Performance_PredictionModel(obj, plot_prediction_performance):
     raw_data = obj.model_raw_data
@@ -145,14 +189,15 @@ def Statistic_ProspectusAnalysis(obj, plot_prospectus_analysis):
             'FinalProspectusPositive',
             'FinalProspectusNegative',
             'PositiveWordsRevision',
-            'NegativeWordsRevision']
+            'NegativeWordsRevision',
+            'FinalProspectusOfferDays']
         
     prosp_data = obj.full_data
-    prosp_data = prosp_data[cols]
-    n_obs = len(prosp_data)
+    prosp_data_analysis = prosp_data[cols]
+    n_obs = len(prosp_data_analysis)
         
-    percs = [0.25, 0.5, 0.75]
-    result = prosp_data.describe(percentiles = percs)
+    percs = [0.01, 0.05, 0.5, 0.95, 0.99]
+    result = prosp_data_analysis.describe(percentiles = percs)
     result = result.transpose()
     result.index = result.index.rename('Variable')
         
@@ -208,7 +253,7 @@ def Statistic_RegressionSample(obj):
     period.columns = ['Year']
     
     join_stats = [reg_mean, miss_mean, miss_values]
-    cols = ['MeanRegSample', 'MeanNonRegSample', 'Missing']
+    cols = ['MeanReg', 'MeanNonReg', 'Missing']
     idx = {'index': 'Variable'}
     result = result.join(join_stats)
     result.columns = cols
@@ -227,8 +272,8 @@ def Statistic_RegressionSample(obj):
             
             tstat = t_test[0]
             pvalue = t_test[1]
-            col = 'pValue'
-            result.loc[index, col] = pvalue
+            cols = ['pValue', 'tValue']
+            result.loc[index, cols] = pvalue, tstat
 # =========================
             year = row['Year']
             year_filt = model_data['IssueYear'] == year
@@ -239,12 +284,13 @@ def Statistic_RegressionSample(obj):
             reg_sample_nobs = len(reg_sample)
             
             share_reg = reg_sample_nobs /sample_nobs
-            mean_ir_reg = reg_sample['InitialReturn']
-            mean_ir_reg = mean_ir_reg.mean()
+            mean_ir = sample_obs['InitialReturn'].mean()
+            mean_ir_reg = reg_sample['InitialReturn'].mean()
             
             result.loc[index, 'IPOs'] = sample_nobs
-            result.loc[index, 'ShareRegSample'] = share_reg
-            result.loc[index, 'MeanInitialReturnRegSample'] = mean_ir_reg
+            result.loc[index, 'ShareReg'] = share_reg
+            result.loc[index, 'MeanReturnFull'] = mean_ir
+            result.loc[index, 'MeanReturnReg'] = mean_ir_reg
             
         else:
             year = row['Year']
@@ -256,20 +302,22 @@ def Statistic_RegressionSample(obj):
             reg_sample_nobs = len(reg_sample)
             
             share_reg = reg_sample_nobs /sample_nobs
-            mean_ir_reg = reg_sample['InitialReturn']
-            mean_ir_reg = mean_ir_reg.mean()
+            mean_ir = sample_obs['InitialReturn'].mean()
+            mean_ir_reg = reg_sample['InitialReturn'].mean()
             
             result.loc[index, 'IPOs'] = sample_nobs
-            result.loc[index, 'ShareRegSample'] = share_reg
-            result.loc[index, 'MeanInitialReturnRegSample'] = mean_ir_reg
+            result.loc[index, 'ShareReg'] = share_reg
+            result.loc[index, 'MeanReturnFull'] = mean_ir
+            result.loc[index, 'MeanReturnReg'] = mean_ir_reg
     
     table_cols = [
             'Variable',
-            'MeanRegSample', 'MeanNonRegSample',
-            'pValue', 'Missing', 
-            'Year', 'IPOs',
-            'ShareRegSample', 
-            'MeanInitialReturnRegSample'
+            'MeanReg', 'MeanNonReg',
+            'pValue', 'tValue',
+            'Missing', 'Year', 
+            'IPOs', 'ShareReg',
+            'MeanReturnFull',
+            'MeanReturnReg'
             ]
 
     result = result.reindex(columns=table_cols)
@@ -404,7 +452,7 @@ def RegressionResults(obj, plot_yearly_regression):
 
         values = np.linspace(0.2, 1., xposM.ravel().shape[0])
         colors = cm.rainbow(values)
-        ax1.view_init(30,70) #(tip, turn counterclockwise(increase) and clockwise(decrease))
+        ax1.view_init(30,70)
         ax1.bar3d(xposM.ravel(), yposM.ravel(), dz*0, dx, dy, dz, color=colors)
         ax1.set_xlabel('Year')
         ax1.set_ylabel('Variables')
@@ -416,6 +464,7 @@ def RegressionResults(obj, plot_yearly_regression):
 # =========================
     sub_reg_results = obj.sub_regression_results
     sub_reg_keyfigs = obj.sub_regression_keyfigs
+    sub_reg_results_full = obj.sub_regression_full_results
 
     plot_reg_result = tabulate(sub_reg_results,
                                headers = 'keys',
@@ -435,11 +484,14 @@ def RegressionResults(obj, plot_yearly_regression):
     print(cutting_line)
     print('Regression results of secondary shares analysis')
     print(cutting_line, '\n')
+    print('\n\n')
+    print(sub_reg_results_full)
+    print('\n\n')
     print(plot_reg_result, '\n\n')
     print(plot_keyfigs)
     print(cutting_line, paragraph)
 
-def UnderpricingAnalysis(feat_eng_obj, pred_obj, plot_underpricing_analysis, target_return):
+def Analysis_ReturnAdjustments(feat_eng_obj, pred_obj, plot_return_adjustments, target_return):
     initial_rets = feat_eng_obj.model_data
     ret_cols = ['InitialReturn', 
                 'InitialReturnAdjusted']
@@ -463,7 +515,7 @@ def UnderpricingAnalysis(feat_eng_obj, pred_obj, plot_underpricing_analysis, tar
                       numalign = 'center',
                       showindex = True)
     
-    if plot_underpricing_analysis == True:
+    if plot_return_adjustments == True:
         print(cutting_line)
         print('Descriptive statistic for initial returns:')
         print(cutting_line, '\n')
