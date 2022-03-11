@@ -67,11 +67,14 @@ class Regression:
         ols_reg = ols_reg.fit(cov_type='HC0')
         
         coefs = ols_reg.params
-        coefs.name = 'Coefficient'
+        coefs.name = 'Coeff'
         coefs = pd.DataFrame(coefs)
         pvalues = ols_reg.pvalues
         pvalues.name = 'pvalue'
         pvalues = pd.DataFrame(pvalues)
+        tvalues = ols_reg.tvalues
+        tvalues.name = 'tvalue'
+        tvalues = pd.DataFrame(tvalues)
         r_sqr = ols_reg.rsquared_adj
         n_obs = ols_reg.nobs
 # =========================
@@ -81,6 +84,7 @@ class Regression:
         keyfig.loc['AdjRSquared', self.key_col] = r_sqr
         keyfig.loc['SampleSize', self.key_col] = n_obs
         result = coefs.join(pvalues)
+        result = result.join(tvalues)
         full_result = ols_reg.summary()
         
         self.ols_result = result
@@ -112,7 +116,10 @@ class Regression:
         pvalues = ols_sub_reg.pvalues
         pvalues.name = 'pvalue'
         pvalues = pd.DataFrame(pvalues)
-        sub_reg_results = coefs.join(pvalues)
+        tvalues = ols_sub_reg.tvalues
+        tvalues.name = 'tvalue'
+        tvalues = pd.DataFrame(tvalues)
+        sub_reg_results = coefs.join([pvalues, tvalues])
         r_sqr = ols_sub_reg.rsquared_adj
         n_obs = ols_sub_reg.nobs
         keyfig = pd.DataFrame()
@@ -120,12 +127,15 @@ class Regression:
         keyfig.loc['SampleSize', self.key_col] = n_obs
         
         coefs_full = ols_sub_reg_full.params
-        coefs_full.name = 'Coefficient'
+        coefs_full.name = 'Coeff'
         coefs_full = pd.DataFrame(coefs_full)
         pvalues_full = ols_sub_reg_full.pvalues
         pvalues_full.name = 'pvalue'
         pvalues_full = pd.DataFrame(pvalues_full)
-        sub_reg_results_full = coefs_full.join(pvalues_full)
+        tvalues_full = ols_sub_reg_full.tvalues
+        tvalues_full.name = 'tvalue'
+        tvalues_full = pd.DataFrame(tvalues_full)
+        sub_reg_results_full = coefs_full.join([pvalues_full, tvalues_full])
         r_sqr_full = ols_sub_reg_full.rsquared_adj
         n_obs_full = ols_sub_reg_full.nobs
         keyfig_full = pd.DataFrame()
@@ -140,6 +150,7 @@ class Regression:
                                            keyfig],
                                           axis=1)
         
+        self.sub_regression_full_results = ols_sub_reg_full.summary()
         self.sub_regression_results = sub_regression_results
         self.sub_regression_keyfigs = sub_regresion_keyfigs
             
@@ -156,6 +167,7 @@ class Regression:
         
         coefs = pd.DataFrame()
         pvalues = pd.DataFrame()
+        tvalues = pd.DataFrame()
         key_fig = pd.DataFrame()
         for index, value in period.iteritems():
             year_filter = self.base['IssueYear'] == value
@@ -171,11 +183,14 @@ class Regression:
             coef.name = value
             pvalue = fmb_reg.pvalues
             pvalue.name = value
+            tvalue = fmb_reg.tvalues
+            tvalue.name = value
             r_sqr = fmb_reg.rsquared_adj    
             nobs = fmb_reg.nobs
 
             coefs = pd.concat([coefs, coef], axis=1)
             pvalues = pd.concat([pvalues, pvalue], axis=1)
+            tvalues = pd.concat([tvalues, tvalue], axis=1)
 # =========================
 # Dataframe key_figs can be extended 
 # by furter key figures at this point            
@@ -183,12 +198,17 @@ class Regression:
             key_fig.loc['SampleSize', value] = nobs
             
         avg_coefs = coefs.mean(axis = 1)
-        avg_coefs.name = 'Coefficient'
+        avg_coefs.name = 'Coeff'
         avg_coefs = pd.DataFrame(avg_coefs)
-        avg_pvalues = pvalues.mean(axis = 1)
+        avg_pvalues = pvalues.drop(columns = ['2008', '2009'])
+        avg_pvalues = avg_pvalues.mean(axis = 1)
         avg_pvalues.name = 'pvalue'
         avg_pvalues = pd.DataFrame(avg_pvalues)
-        avg_result = avg_coefs.join(avg_pvalues)
+        avg_tvalues = tvalues.drop(columns = ['2008', '2009'])
+        avg_tvalues = avg_tvalues.mean(axis = 1)
+        avg_tvalues.name = 'tvalue'
+        avg_tvalues = pd.DataFrame(avg_tvalues)
+        avg_result = avg_coefs.join([avg_pvalues, avg_tvalues])
     
         avg_keyfig = key_fig.mean(axis = 1)
         avg_keyfig = avg_keyfig.loc[self.key_figures]
@@ -210,10 +230,12 @@ class Regression:
         fmb_result = self.fmb_result
         fmb_keyfig = self.fmb_keyfig
 
-        cols_ols = {'Coefficient': 'Coefficient_OLS',
-                    'pvalue': 'pvalue_OLS'}
-        cols_fmb = {'Coefficient': 'Coefficient_FMB',
-                    'pvalue': 'pvalue_FMB'}
+        cols_ols = {'Coeff': 'Coeff_OLS',
+                    'pvalue': 'pvalue_OLS',
+                    'tvalue': 'tvalue_OLS'}
+        cols_fmb = {'Coeff': 'Coeff_FMB',
+                    'pvalue': 'pvalue_FMB',
+                    'tvalue': 'tvalue_FMB'}
         ols_res_adj = ols_result.rename(columns=cols_ols)
         fmb_res_adj = fmb_result.rename(columns=cols_fmb)
         reg_result = ols_res_adj.join(fmb_res_adj)   
@@ -285,6 +307,8 @@ class Regression:
                 fmb_aggres.to_csv(output_path+'\\'+file_fmb)
                 fmb_aggkey = pd.DataFrame(columns = [index_col])
                 fmb_aggkey.to_csv(output_path+'\\'+file_fmb_keyfig)
+                
+                sys.exit(exit_message2)
             
             
 
