@@ -34,11 +34,9 @@ model_cols = [
     'PriceRevisionMaxDummy', 'PriceRevisionMaxSlopeDummy', 
     'PriceRevisionMinDummy', 'PriceRevisionMinSlopeDummy', 
     'WordsRevisionDummy', 'PositiveWordsRevision', 'NegativeWordsRevision',
-    'SecondarySharesDummy', 'SecondarySharesRevisionDummy', 
-    'SecondarySharesRevisionRatio', 'TotalSharesRevisionDummy',
-    'PrimarySharesRevisionDummy', 'RegistrationDays', 
+    'SecondarySharesDummy', 'SecondarySharesRevision', 'SharesShiftDummy',
     'LastPriceAdjustOfferDays', 'LastShareAdjustOfferDays', 
-    'FinalProspectusOfferDays', 'IssueDate',
+    'FinalProspectusOfferDays', 'RegistrationDays', 'IssueDate',
     ]
 
 class FeatureEngineering:
@@ -541,37 +539,51 @@ class FeatureEngineering:
         secondary_shares_idx = self.full_data[secondary_shares_mask].index
         self.full_data.loc[primary_shares_idx, 'SecondarySharesDummy'] = 0
         self.full_data.loc[secondary_shares_idx, 'SecondarySharesDummy'] = 1
-            
-        sec_shares_diff = sec_shares_offered - sec_shares_filed
-        sec_shares_rev = (sec_shares_offered / sec_shares_filed) -1
-        sec_shares_rev_dummy = np.where(sec_shares_rev > 0, 1 ,0)
-        nan_ident = pd.isnull(sec_shares_rev) == True
-        nan_idx = sec_shares_rev.loc[nan_ident].index
+        
+        sec_shares_rev = sec_shares_offered / sec_shares_filed -1
         self.full_data['SecondarySharesRevision'] = sec_shares_rev
-        self.full_data['SecondarySharesRevisionDummy'] = sec_shares_rev_dummy
-        self.full_data['SecondarySharesRevisionDummy'].loc[nan_idx] = np.nan
+        
+        sec_shares_inc = sec_shares_offered - sec_shares_filed
+        sec_shares_inc_dummy = np.where(sec_shares_inc > 0, 1, 0)
+        sec_shares_inc_dummy = pd.Series(sec_shares_inc_dummy)
+        nan_ident = pd.isnull(sec_shares_inc) == True
+        nan_idx = sec_shares_inc.loc[nan_ident].index
+        sec_shares_inc_dummy.loc[nan_idx] = np.nan
+        sec_shares_inc_ratio = sec_shares_inc / sec_shares_filed
+        sec_shares_inc_ratio = sec_shares_inc_ratio * sec_shares_inc_dummy
+        self.full_data['SecondarySharesRatio'] = sec_shares_inc_ratio
+        
+        for index, row in self.full_data.iterrows():
+            if (pd.isnull(row['AmendHistShsFiledSumOfAllMkts'])==False)&\
+            (pd.isnull(row['AmendHistSecShsFiledSumOfAllMkts'])==False):
+                amend_sec_shs = row['AmendHistSecShsFiledSumOfAllMkts']
+                amend_sec_shs = re.findall(r'[^|]+(?=|[^|]*$)', amend_sec_shs)
+                amend_shs = row['AmendHistShsFiledSumOfAllMkts']
+                amend_shs = re.findall(r'[^|]+(?=|[^|]*$)', amend_shs)
+                if len(amend_sec_shs) == len(amend_shs):
+                    if len(amend_sec_shs) > 1 and len(amend_shs) > 1:
+                        base_sec_shs = []
+                        base_shs = []
+                        for sec_shs, shs in zip(amend_sec_shs, amend_shs):
+                            sec_shs = sec_shs.replace(',', '')
+                            shs = shs.replace(',', '')
+                            if sec_shs.isdecimal() and shs.isdecimal():
+                                sec_shs = float(sec_shs)
+                                shs = float(shs)
+                                if len(base_sec_shs) == 0 and len(base_shs) == 0:
+                                    base_sec_shs.append(sec_shs)
+                                    base_shs.append(shs)
+                                else:
+                                    if sec_shs > base_sec_shs[-1] and shs <= base_shs[-1]:
+                                        self.full_data.loc[index, 'SharesShiftDummy'] = 1
+                                        break
+                                    else:
+                                        base_sec_shs.append(sec_shs)
+                                        base_shs.append(shs)
 
-        sec_shares_rev_dummy = self.full_data['SecondarySharesRevisionDummy']
-        sec_shares_rev_ratio = sec_shares_diff / sec_shares_filed
-        sec_shares_rev_ratio = np.where(sec_shares_diff > 0, sec_shares_rev_ratio, 0)
-        self.full_data['SecondarySharesRevisionRatio'] = sec_shares_rev_ratio
-        nan_ident = pd.isnull(sec_shares_diff) == True
-        nan_idx = sec_shares_diff.loc[nan_ident].index
-        self.full_data['SecondarySharesRevisionRatio'].loc[nan_idx] = np.nan
-        
-        primary_shares_rev = (prim_shares_offered / prim_shares_filed) -1
-        primary_shares_rev_dummy = np.where(primary_shares_rev > 0, 1 ,0)
-        nan_ident = pd.isnull(primary_shares_rev) == True
-        nan_idx = primary_shares_rev.loc[nan_ident].index
-        self.full_data['PrimarySharesRevisionDummy'] = primary_shares_rev_dummy
-        
-        tot_shares_rev = (tot_shares_offered / tot_shares_filed) -1
-        tot_shares_rev_dummy = np.where(tot_shares_rev > 0, 1 ,0)
-        nan_ident = pd.isnull(tot_shares_rev) == True
-        nan_idx = tot_shares_rev.loc[nan_ident].index
-        self.full_data['TotalSharesRevisionDummy'] = tot_shares_rev_dummy
-        
-        
+        self.full_data['SharesShiftDummy'] = self.full_data['SharesShiftDummy'].replace(np.nan, 0)
+
+                
         act_pro = self.full_data['ActualProceeds']
         exp_pro = self.full_data['ExpectedProceeds']
         pro_rev = (act_pro / exp_pro) -1
