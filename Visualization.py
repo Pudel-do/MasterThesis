@@ -226,7 +226,7 @@ def Statistic_RegressionSample(obj):
         if not any(char in var for char in drop_chars):
             stat_vars.append(var)
 
-    stat_vars.append('RegistrationDays')
+    stat_vars.append('SecondarySharesDummy')
     stat_vars_ext = stat_vars.copy()
     stat_vars_ext.append('IssueYear')
     
@@ -463,33 +463,12 @@ def RegressionResults(obj, plot_yearly_regression):
         plt.show()
 # =========================
     sub_reg_results = obj.sub_regression_results
-    sub_reg_keyfigs = obj.sub_regression_keyfigs
-    sub_reg_results_full = obj.sub_regression_full_results
-
-    plot_reg_result = tabulate(sub_reg_results,
-                               headers = 'keys',
-                               floatfmt = '.2f',
-                               tablefmt = 'simple',
-                               numalign = 'center',
-                               showindex = True)
-    plot_reg_result = plot_reg_result.replace('nan', '---')
-
-    plot_keyfigs = tabulate(sub_reg_keyfigs,
-                            headers = 'keys',
-                            floatfmt = '.2f',
-                            tablefmt = 'simple',
-                            numalign = 'center',
-                            showindex = True)
     
     print(cutting_line)
     print('Regression results of secondary shares analysis')
     print(cutting_line, '\n')
     print('\n\n')
-    print(sub_reg_results_full)
-    print('\n\n')
-    print(plot_reg_result, '\n\n')
-    print(plot_keyfigs)
-    print(cutting_line, paragraph)
+    print(sub_reg_results)
 
 def Analysis_ReturnAdjustments(feat_eng_obj, pred_obj, plot_return_adjustments, target_return):
     initial_rets = feat_eng_obj.model_data
