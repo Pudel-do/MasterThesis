@@ -34,7 +34,8 @@ model_cols = [
     'PriceRevisionMaxDummy', 'PriceRevisionMaxSlopeDummy', 
     'PriceRevisionMinDummy', 'PriceRevisionMinSlopeDummy', 
     'WordsRevisionDummy', 'PositiveWordsRevision', 'NegativeWordsRevision',
-    'SecondarySharesDummy', 'SecondarySharesRevision', 'SharesShiftDummy',
+    'SecondarySharesDummy', 'SecondarySharesRevision', 
+    'SecondarySharesRevisionSLopeDummy', 'ShareSwitchDummy',
     'LastPriceAdjustOfferDays', 'LastShareAdjustOfferDays', 
     'FinalProspectusOfferDays', 'RegistrationDays', 'IssueDate',
     ]
@@ -543,6 +544,9 @@ class FeatureEngineering:
         sec_shares_rev = sec_shares_offered / sec_shares_filed -1
         self.full_data['SecondarySharesRevision'] = sec_shares_rev
         
+        sec_shares_rev_dummy = get_SlopeDummy(sec_shares_rev)
+        self.full_data['SecondarySharesRevisionSLopeDummy'] = sec_shares_rev_dummy
+        
         sec_shares_inc = sec_shares_offered - sec_shares_filed
         sec_shares_inc_dummy = np.where(sec_shares_inc > 0, 1, 0)
         sec_shares_inc_dummy = pd.Series(sec_shares_inc_dummy)
@@ -575,13 +579,13 @@ class FeatureEngineering:
                                     base_shs.append(shs)
                                 else:
                                     if sec_shs > base_sec_shs[-1] and shs <= base_shs[-1]:
-                                        self.full_data.loc[index, 'SharesShiftDummy'] = 1
+                                        self.full_data.loc[index, 'ShareSwitchDummy'] = 1
                                         break
                                     else:
                                         base_sec_shs.append(sec_shs)
                                         base_shs.append(shs)
 
-        self.full_data['SharesShiftDummy'] = self.full_data['SharesShiftDummy'].replace(np.nan, 0)
+        self.full_data['ShareSwitchDummy'] = self.full_data['ShareSwitchDummy'].replace(np.nan, 0)
 
                 
         act_pro = self.full_data['ActualProceeds']
@@ -640,7 +644,7 @@ class FeatureEngineering:
                 
         self.model_data = self.full_data[model_cols]
            
-    def outlier_adjustment(self, whisker_factor, plot_outliers):
+    def outlier_adjustment(self, whisker_factor, plot_outliers, drop_outlier_years):
         percs = [0.05, 0.25, 0.5, 0.75, 0.95]
         
         drop_cols = [
@@ -770,8 +774,14 @@ class FeatureEngineering:
         print(f'Number of observations after adjustments: {nobs_adj}')
         print(f'Number of removed outliers: {n_outliers}')
         print(cutting_line, paragraph)
-       
-            
+        file_name = 'ModelSampleData.xlsx'
+        self.model_data.to_excel(output_path_plots+'\\'+file_name)
+        
+        if drop_outlier_years == True:
+            issue_year = self.model_data['IssueDate'].dt.strftime('%Y')
+            valid_idx = ~issue_year.isin(['2008', '2009'])
+            self.model_data = self.model_data[valid_idx]
+
             
             
             
