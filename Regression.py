@@ -27,7 +27,8 @@ sub_reg_cols = [
     'WordsRevisionDummy', 
     'PriceRevision', 
     'SecondarySharesRevision', 
-    'SharesShiftDummy',
+    'SecondarySharesRevisionSLopeDummy',
+    'ShareSwitchDummy',
     ]
 
 class Regression:
@@ -108,7 +109,7 @@ class Regression:
         ols_sub_reg = ols_sub_reg.fit(cov_type='HC0')
         self.sub_regression_results = ols_sub_reg.summary()
             
-    def fmb_regression(self, start_date, end_date):
+    def fmb_regression(self, start_date, end_date, drop_outlier_years):
         self.start = start_date
         self.end = end_date
         
@@ -118,6 +119,10 @@ class Regression:
         
         period = period.strftime('%Y')
         period = pd.Series(period)
+        
+        if drop_outlier_years == True:
+            valid_idx = ~period.isin(['2008', '2009'])
+            period = period[valid_idx]
         
         coefs = pd.DataFrame()
         pvalues = pd.DataFrame()
@@ -154,12 +159,18 @@ class Regression:
         avg_coefs = coefs.mean(axis = 1)
         avg_coefs.name = 'Coeff'
         avg_coefs = pd.DataFrame(avg_coefs)
-        avg_pvalues = pvalues.drop(columns = ['2008', '2009'])
-        avg_pvalues = avg_pvalues.mean(axis = 1)
+        if drop_outlier_years == False:
+            avg_pvalues = pvalues.drop(columns = ['2008', '2009'])
+            avg_pvalues = avg_pvalues.mean(axis = 1)
+        else:
+            avg_pvalues = pvalues.mean(axis = 1)
         avg_pvalues.name = 'pvalue'
         avg_pvalues = pd.DataFrame(avg_pvalues)
-        avg_tvalues = tvalues.drop(columns = ['2008', '2009'])
-        avg_tvalues = avg_tvalues.mean(axis = 1)
+        if drop_outlier_years == False:
+            avg_tvalues = tvalues.drop(columns = ['2008', '2009'])
+            avg_tvalues = avg_tvalues.mean(axis = 1)
+        else:
+            avg_tvalues = tvalues.mean(axis = 1)
         avg_tvalues.name = 'tvalue'
         avg_tvalues = pd.DataFrame(avg_tvalues)
         avg_result = avg_coefs.join([avg_pvalues, avg_tvalues])
@@ -168,6 +179,10 @@ class Regression:
         avg_keyfig = avg_keyfig.loc[self.key_figures]
         avg_keyfig.name = self.key_col
         avg_keyfig = pd.DataFrame(avg_keyfig)
+        
+        file_name = 'FMB_YearlyRegressionResults.xlsx'
+        plot_data = coefs.drop('const')
+        plot_data.to_excel(output_path_plots+'\\'+file_name)
         
         self.fmb_coefs = coefs
         self.fmb_pvalues = pvalues
