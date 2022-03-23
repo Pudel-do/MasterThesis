@@ -8,16 +8,18 @@ Created on Fri Jan 14 16:03:47 2022
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-# import tensorflow as tf
-# from tensorflow import keras 
+import tensorflow as tf
+import sklearn
+from tensorflow import keras 
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
-from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.model_selection import train_test_split, GridSearchCV, RandomizedSearchCV
 from imblearn.over_sampling import RandomOverSampler, SMOTE, BorderlineSMOTE, SMOTENC
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import Lasso
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import recall_score
 from sklearn.metrics import precision_score
+from scipy.stats import reciprocal
 from contextlib import redirect_stdout
 from GetData import *
 from Visualization import *
@@ -26,8 +28,7 @@ pred_cols = [
     'InitialReturn', 'InitialReturnAdjusted',
     'UnderwriterRank', 'TotalAssets', 
     'TechDummy', 'VentureDummy', 
-    'AMEX', 'NASDQ', 'NYSE',
-    'ExpectedProceeds', 'ActualProceeds',
+    'ExpectedProceeds',
     'SectorVolume', 'Volume',
     'MarketReturn', 'SectorReturn',
     'PriceRevision', 'RegistrationDays',
@@ -38,28 +39,22 @@ pred_cols = [
     'InitialProspectusStrongModal',
     'InitialProspectusWeakModal',
     'InitialProspectusConstraining',
-    'FinalProspectusPositive',
-    'FinalProspectusNegative',
-    'FinalProspectusUncertain',
-    'FinalProspectusLitigious',
-    'FinalProspectusStrongModal',
-    'FinalProspectusWeakModal',
-    'FinalProspectusConstraining',
-    'SharesRevision', 
+    'SecondarySharesDummy', 
     ]
 
 dummy_cols = [
     'TechDummy', 'VentureDummy', 
-    'AMEX', 'NASDQ', 'NYSE',
+    'SecondarySharesDummy',
     ]
 
 class PredictionModel:
     def __init__(self, feat_eng_obj, start_year, end_year):
         self.obj = feat_eng_obj
         self.model_raw_data = feat_eng_obj.full_data
+        self.model_raw_data = self.model_raw_data.loc[self.obj.model_data.index]
         self.start_year = start_year
         self.end_year = end_year
-        self.n_sub_test_set = 2
+        self.n_sub_test_set = 5
         
     def preprocessing(self, target_return, adj_preprocessing, use_dummy_variables, use_feature_selection):
         start_year = self.start_year
@@ -117,6 +112,7 @@ class PredictionModel:
             feat_treshold = 0.01
             feat_select_iterations = 5
             rand_stat = None
+            rand_stat_train_test = None
             selector = RandomForestClassifier(n_estimators = 500)
             if use_dummy_variables == False:
                 sampler = SMOTE(sampling_strategy = sample_strat,
@@ -151,17 +147,19 @@ class PredictionModel:
                 features = regressors.columns.to_list()
             
             self.features = features
+            self.total_feature_results = feat_weights_result
+            
             model_set = {}
             sub_test_set = {}
             for i in range(self.n_sub_test_set+1):
                 x_train, x_test, y_train, y_test = train_test_split(regressors, 
                                                                     target, 
                                                                     test_size=0.10,
-                                                                    random_state = rand_stat)
+                                                                    random_state = rand_stat_train_test)
                 
                 x_train, x_valid, y_train, y_valid = train_test_split(x_train, y_train, 
                                                                       test_size=0.25,
-                                                                      random_state = rand_stat)
+                                                                      random_state = rand_stat_train_test)
                 
                 x_train, y_train = sampler.fit_resample(x_train, y_train)
                 x_valid, y_valid = sampler.fit_resample(x_valid, y_valid)
@@ -191,8 +189,6 @@ class PredictionModel:
             sub_test_set = get_object(output_path, test_sets_obj_file)
             self.model_set = model_set
             self.sub_test_set = sub_test_set
-            
-        print('Test')
 
     def model_training(self, adj_model_training, adj_benchmark_training, benchmark):
         self.benchmark = benchmark
@@ -204,57 +200,39 @@ class PredictionModel:
         
         if adj_model_training == True:
             input_shape = x_train.shape[1]
-            model = keras.models.Sequential([
-                keras.layers.Flatten(input_shape = [input_shape]),
-                keras.layers.Dense(300, activation = 'relu'),
-                keras.layers.Dense(100, activation = 'relu'),
-                keras.layers.Dense(1, activation = 'sigmoid')
-                ])
+            early_stopping = keras.callbacks.EarlyStopping(patience=15)
             
-            early_stopping = keras.callbacks.EarlyStopping(patience=20,
-                                                           restore_best_weights=True)
-
-            model.compile(loss='binary_crossentropy',
-                          optimizer='sgd',
-                          metrics=['accuracy'])
+            param_distribs = {
+                'n_hidden': [1,2,3,4,5],
+                'n_neurons': np.arange(10,100).tolist(),
+                'learning_rate': list(reciprocal(3e-4, 3e-2).args),
+                'input_shape': [input_shape]
+                }
             
-            history = model.fit(x_train, y_train,
-                                validation_data=(x_valid, y_valid),
-                                callbacks=[early_stopping],
-                                epochs=100)
+            keras_classifier = keras.wrappers.scikit_learn.KerasClassifier(build_neural_network)            
+            neural_network = RandomizedSearchCV(keras_classifier, 
+                                                param_distribs, 
+                                                cv=5)
+            neural_network.fit(x_train, y_train,
+                               validation_data=(x_valid, y_valid),
+                               callbacks=[early_stopping],
+                               epochs=100)
             
-            adj_cols = {'loss': 'Loss_Training',
-                        'acc': 'Accuracy_Training',
-                        'val_loss': 'Loss_Validation',
-                        'val_acc': 'Accuracy_Validation'}
-            train_performance = pd.DataFrame(history.history)
-            train_performance = train_performance.rename(columns = adj_cols)
-            labels = train_performance.columns
-            plt.figure(figsize=figsize)
-            plt.plot(train_performance)
-            plt.grid(True)
-            plt.legend(labels=labels, fontsize = legend_size)
-            plt.xlabel('Epochs', fontdict = xlabel_size)
-            plt.ylabel('Value', fontdict = ylabel_size)
-            title = 'Training performance of neural network'
-            plt.title(title, fontdict = title_size)
-            plt.show()
-            
+            model_best_params = neural_network.best_params_
+            model = neural_network.best_estimator_.model
             model.save(output_path+'\\'+trained_neural_network_file)
+            save_obj(model_best_params, output_path, trained_neural_network_best_params)
             
         if adj_benchmark_training == True:
             classifier = benchmark_classifier[benchmark]
             param_grid = benchmark_param_grids[benchmark]
 
-            
             benchmark_model = GridSearchCV(classifier,
                                            param_grid,
                                            cv=5,
                                            scoring='accuracy')
             
             benchmark_model.fit(x_train, y_train)
-            
-            self.benchmark_model = benchmark_model
             benchmark_file = trained_benchmark_file
             benchmark_file = f'{self.benchmark}_{benchmark_file}'
             save_obj(benchmark_model, output_path, benchmark_file)
@@ -265,13 +243,8 @@ class PredictionModel:
         x_test = model_set['x_test']
         y_test = model_set['y_test']
         
+        model_best_params = get_object(output_path, trained_neural_network_best_params)
         model = keras.models.load_model(output_path+'\\'+trained_neural_network_file)
-        with open(output_path+'\\'+neural_network_summary_file, 'w') as f:
-            with redirect_stdout(f):
-                model.summary()
-                
-        model_summary = open(output_path+'\\'+neural_network_summary_file, 'r')
-        model_summary = model_summary.read()
         
         benchmark_file = trained_benchmark_file
         benchmark_file = f'{self.benchmark}_{benchmark_file}'
@@ -292,8 +265,8 @@ class PredictionModel:
         y_pred_bench.index = y_test.index
         benchmark_prediction = pd.concat([y_test, y_pred_bench], axis=1)
         
-        self.model_summary = model_summary
         self.model_prediction = model_prediction
+        self.model_best_params = model_best_params
         self.benchmark_model = benchmark_model
         self.benchmark_prediction = benchmark_prediction
         
