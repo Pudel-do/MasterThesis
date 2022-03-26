@@ -12,7 +12,7 @@ import tensorflow as tf
 import sklearn
 from tensorflow import keras 
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
-from sklearn.model_selection import train_test_split, GridSearchCV, RandomizedSearchCV
+from sklearn.model_selection import train_test_split, GridSearchCV, RandomizedSearchCV, StratifiedKFold
 from imblearn.over_sampling import RandomOverSampler, SMOTE, BorderlineSMOTE, SMOTENC
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import Lasso
@@ -54,7 +54,7 @@ class PredictionModel:
         self.model_raw_data = self.model_raw_data.loc[self.obj.model_data.index]
         self.start_year = start_year
         self.end_year = end_year
-        self.n_sub_test_set = 5
+        self.n_sub_test_set = 10
         
     def preprocessing(self, target_return, adj_preprocessing, use_dummy_variables, use_feature_selection):
         start_year = self.start_year
@@ -87,7 +87,7 @@ class PredictionModel:
         self.model_cols = model_cols
 # =========================
         if adj_preprocessing == True:
-            scaler = StandardScaler()
+            scaler = MinMaxScaler()
             unscaled_cols = dummy_cols.copy()
             unscaled_cols.append('Target')
             scaled_cols = []
@@ -110,7 +110,7 @@ class PredictionModel:
             regressors = pred_data_adj.drop(columns = 'Target')
             sample_strat = 1
             feat_treshold = 0.01
-            feat_select_iterations = 5
+            feat_select_iterations = 10
             rand_stat = None
             rand_stat_train_test = None
             selector = RandomForestClassifier(n_estimators = 500)
@@ -140,26 +140,30 @@ class PredictionModel:
                     feat_weights = feat_weights.join(feat_weight)
                     
                 feat_weights_result = feat_weights.mean(axis=1)
+                total_feature_results = feat_weights_result.sort_values(ascending=False)
+                total_feature_results.to_csv(output_path+'\\'+feature_results_file)
                 features = feat_weights_result.where(feat_weights_result>feat_treshold)
                 features = features.dropna()
                 features = features.index.to_list()
             else:
                 features = regressors.columns.to_list()
-            
-            self.features = features
-            self.total_feature_results = feat_weights_result
+
+            total_feature_results = pd.read_csv(output_path+'\\'+feature_results_file)
+            print(total_feature_results)
+            self.total_feature_results = total_feature_results
             
             model_set = {}
             sub_test_set = {}
             for i in range(self.n_sub_test_set+1):
                 x_train, x_test, y_train, y_test = train_test_split(regressors, 
                                                                     target, 
-                                                                    test_size=0.10,
+                                                                    test_size=0.2,
                                                                     random_state = rand_stat_train_test)
-                
+
                 x_train, x_valid, y_train, y_valid = train_test_split(x_train, y_train, 
-                                                                      test_size=0.25,
+                                                                      test_size=0.1,
                                                                       random_state = rand_stat_train_test)
+                
                 
                 x_train, y_train = sampler.fit_resample(x_train, y_train)
                 x_valid, y_valid = sampler.fit_resample(x_valid, y_valid)
@@ -189,8 +193,9 @@ class PredictionModel:
             sub_test_set = get_object(output_path, test_sets_obj_file)
             self.model_set = model_set
             self.sub_test_set = sub_test_set
+            self.total_feature_results = pd.read_csv(output_path+'\\'+feature_results_file)
 
-    def model_training(self, adj_model_training, adj_benchmark_training, benchmark):
+    def model_training(self, adj_model_training, adj_benchmark_training, benchmark, adj_gridsearch):
         self.benchmark = benchmark
         model_set = self.model_set
         x_train = model_set['x_train']
@@ -202,41 +207,88 @@ class PredictionModel:
             input_shape = x_train.shape[1]
             early_stopping = keras.callbacks.EarlyStopping(patience=15)
             
-            param_distribs = {
-                'n_hidden': [1,2,3,4,5],
-                'n_neurons': np.arange(10,100).tolist(),
-                'learning_rate': list(reciprocal(3e-4, 3e-2).args),
-                'input_shape': [input_shape]
-                }
+            if adj_gridsearch == True:
+                cv_results = {}
+                param_distribs = {
+                    'n_hidden': [1,2,3,4,5],
+                    'n_neurons': np.arange(10,150).tolist(),
+                    'drop_rate': [0.0, 0.1, 0.2, 0.3],
+                    'learning_rate': [0.003, 0.03, 0.01, 0.1, 0.3],
+                    'input_shape': [input_shape]
+                    }
             
-            keras_classifier = keras.wrappers.scikit_learn.KerasClassifier(build_neural_network)            
-            neural_network = RandomizedSearchCV(keras_classifier, 
-                                                param_distribs, 
-                                                cv=5)
-            neural_network.fit(x_train, y_train,
-                               validation_data=(x_valid, y_valid),
-                               callbacks=[early_stopping],
-                               epochs=100)
+                keras_classifier = keras.wrappers.scikit_learn.KerasClassifier(build_neural_network)            
+                neural_network = RandomizedSearchCV(keras_classifier, 
+                                                    param_distribs, 
+                                                    cv=5,
+                                                    n_iter=20,
+                                                    scoring='accuracy')
+                
+                neural_network.fit(x_train, y_train,
+                                   validation_data=(x_valid, y_valid),
+                                   callbacks=[early_stopping],
+                                   epochs=100)
+                
+                cv_results['Best_Score'] = neural_network.best_score_
+                cv_results['cv_Results'] = neural_network.cv_results_
             
-            model_best_params = neural_network.best_params_
-            model = neural_network.best_estimator_.model
+                model_best_params = neural_network.best_params_
+                save_obj(model_best_params, output_path, trained_neural_network_best_params)
+                save_obj(cv_results, output_path, trained_neural_network_cv_results)
+            else:
+                model_best_params = get_object(output_path, trained_neural_network_best_params)
+                cv_results = get_object(output_path, trained_neural_network_cv_results)
+                
+            n_hidden = model_best_params['n_hidden']
+            n_neurons = model_best_params['n_neurons']
+            learning_rate = model_best_params['learning_rate']
+            drop_rate = model_best_params['drop_rate']
+                
+            model = build_neural_network(n_hidden=n_hidden, 
+                                         n_neurons=n_neurons, 
+                                         learning_rate=learning_rate, 
+                                         drop_rate=drop_rate, 
+                                         input_shape=input_shape)
+                
+            history = model.fit(x_train, y_train,
+                                validation_data=(x_valid, y_valid),
+                                callbacks=[early_stopping],
+                                epochs=100)
+                
+            adj_cols = {'loss': 'Loss_Training',
+                        'acc': 'Accuracy_Training',
+                        'val_loss': 'Loss_Validation',
+                        'val_acc': 'Accuracy_Validation'}
+            train_performance = pd.DataFrame(history.history)
+            train_performance = train_performance.rename(columns = adj_cols)
+            labels = train_performance.columns
+            plt.figure(figsize=figsize)
+            plt.plot(train_performance)
+            plt.grid(True)
+            plt.legend(labels=labels, fontsize = legend_size)
+            plt.xlabel('Epochs', fontdict = xlabel_size)
+            plt.ylabel('Value', fontdict = ylabel_size)
+            title = 'Training performance of neural network'
+            plt.title(title, fontdict = title_size)
+            plt.show()
+                
             model.save(output_path+'\\'+trained_neural_network_file)
-            save_obj(model_best_params, output_path, trained_neural_network_best_params)
             
         if adj_benchmark_training == True:
             classifier = benchmark_classifier[benchmark]
             param_grid = benchmark_param_grids[benchmark]
 
-            benchmark_model = GridSearchCV(classifier,
-                                           param_grid,
-                                           cv=5,
-                                           scoring='accuracy')
+            benchmark_model = RandomizedSearchCV(classifier,
+                                                 param_grid,
+                                                 cv=5,
+                                                 n_iter=20,
+                                                 scoring='accuracy')
             
             benchmark_model.fit(x_train, y_train)
             benchmark_file = trained_benchmark_file
             benchmark_file = f'{self.benchmark}_{benchmark_file}'
             save_obj(benchmark_model, output_path, benchmark_file)
-            
+             
     def model_evaluation(self):
         model_set = self.model_set
         sub_test_set = self.sub_test_set
@@ -244,6 +296,7 @@ class PredictionModel:
         y_test = model_set['y_test']
         
         model_best_params = get_object(output_path, trained_neural_network_best_params)
+        cv_results = get_object(output_path, trained_neural_network_cv_results)
         model = keras.models.load_model(output_path+'\\'+trained_neural_network_file)
         
         benchmark_file = trained_benchmark_file
@@ -267,6 +320,7 @@ class PredictionModel:
         
         self.model_prediction = model_prediction
         self.model_best_params = model_best_params
+        self.cv_results = cv_results
         self.benchmark_model = benchmark_model
         self.benchmark_prediction = benchmark_prediction
         
